@@ -1,0 +1,160 @@
+@page {
+    size: A4 portrait;
+    margin: 25mm 25mm 22mm;
+}
+
+@page :odd {
+    margin-top: 30mm;
+}
+
+@page :even {
+    margin-top: 24mm;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    color: #111111;
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+}
+
+p {
+    margin: 0;
+}
+
+.draft-watermark {
+    position: fixed;
+    top: 47%;
+    right: 0;
+    left: 0;
+    color: #777777;
+    font-size: 27pt;
+    font-weight: bold;
+    letter-spacing: 0.6pt;
+    opacity: 0.11;
+    text-align: center;
+}
+
+.letter-meta {
+    width: 100%;
+    margin: 0 0 8mm;
+    border-collapse: collapse;
+}
+
+.letter-meta td {
+    width: 50%;
+    padding: 0;
+    vertical-align: top;
+}
+
+.letter-date {
+    text-align: right;
+}
+
+.recipient {
+    margin-bottom: 7mm;
+    line-height: 1.35;
+}
+
+.recipient-name {
+    font-weight: bold;
+}
+
+.letter-subject {
+    margin: 0 0 7mm;
+    font-weight: bold;
+    text-align: center;
+    text-decoration: underline;
+}
+
+.body-copy {
+    margin-bottom: 4mm;
+    text-align: justify;
+    white-space: pre-line;
+}
+
+.clauses {
+    margin-top: 2mm;
+}
+
+.clause {
+    page-break-inside: auto;
+}
+
+.clause-block {
+    width: 100%;
+    border-collapse: collapse;
+    page-break-inside: avoid;
+    table-layout: fixed;
+}
+
+.clause-block td {
+    padding: 0 0 2.2mm;
+    vertical-align: top;
+}
+
+.clause-number {
+    width: 8mm;
+}
+
+.clause-title {
+    width: 44mm;
+    padding-right: 2mm !important;
+    font-weight: bold;
+}
+
+.clause-colon {
+    width: 5mm;
+}
+
+.clause-content {
+    text-align: justify;
+    white-space: pre-line;
+}
+
+.clause-list-item {
+    padding-left: 4mm !important;
+    text-align: left;
+}
+
+.bullet {
+    display: inline-block;
+    width: 4mm;
+    margin-left: -4mm;
+}
+
+.closing-copy {
+    margin-top: 3mm;
+}
+
+.signatures {
+    width: 100%;
+    margin-top: 9mm;
+    border-collapse: collapse;
+    page-break-inside: avoid;
+}
+
+.signatures td {
+    width: 50%;
+    padding: 0 5mm 0 0;
+    vertical-align: top;
+}
+
+.signature-space td {
+    height: 27mm;
+}
+
+.signature-name {
+    font-weight: bold;
+    text-decoration: underline;
+}
