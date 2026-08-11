@@ -23,55 +23,48 @@ new class extends Component
     }
 }; ?>
 
-<section class="space-y-6">
+<section aria-labelledby="delete-account-heading">
     <header>
-        <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-            {{ __('Delete Account') }}
-        </h2>
-
-        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {{ __('Once your account is deleted, all of its resources and data will be permanently deleted. Before deleting your account, please download any data or information that you wish to retain.') }}
-        </p>
+        <h2 id="delete-account-heading" class="ui-section-heading text-rose-700 dark:text-rose-400">Hapus akun</h2>
+        <p class="ui-section-description">Penghapusan bersifat permanen dan mungkin ditolak jika akun masih terkait dengan data operasional.</p>
     </header>
 
     <x-danger-button
-        x-data=""
+        type="button"
+        class="mt-5"
         x-on:click.prevent="$dispatch('open-modal', 'confirm-user-deletion')"
-    >{{ __('Delete Account') }}</x-danger-button>
+    >Hapus akun</x-danger-button>
 
-    <x-modal name="confirm-user-deletion" :show="$errors->isNotEmpty()" focusable>
-        <form wire:submit="deleteUser" class="p-6">
+    <x-modal name="confirm-user-deletion" :show="$errors->isNotEmpty()" maxWidth="sm" labelledby="delete-account-modal-title" focusable>
+        <div class="ui-modal-header">
+            <div>
+                <h2 id="delete-account-modal-title" class="ui-modal-title">Hapus akun secara permanen?</h2>
+                <p class="mt-1 text-sm text-ink-muted">Masukkan password Anda untuk mengonfirmasi tindakan ini.</p>
+            </div>
+            <button x-on:click="$dispatch('close')" type="button" class="ui-icon-btn -my-1 h-9 w-9" aria-label="Tutup konfirmasi hapus akun">&times;</button>
+        </div>
 
-            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                {{ __('Are you sure you want to delete your account?') }}
-            </h2>
-
-            <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                {{ __('Once your account is deleted, all of its resources and data will be permanently deleted. Please enter your password to confirm you would like to permanently delete your account.') }}
-            </p>
-
-            <div class="mt-6">
-                <x-input-label for="password" value="{{ __('Password') }}" class="sr-only" />
-
+        <form wire:submit="deleteUser">
+            <div class="ui-modal-body">
+                <x-input-label for="delete-account-password" value="Password" />
                 <x-text-input
                     wire:model="password"
-                    id="password"
+                    id="delete-account-password"
                     name="password"
                     type="password"
-                    class="mt-1 block w-3/4"
-                    placeholder="{{ __('Password') }}"
+                    autocomplete="current-password"
+                    class="mt-1"
+                    aria-describedby="delete-account-password-error"
+                    aria-invalid="{{ $errors->has('password') ? 'true' : 'false' }}"
                 />
-
-                <x-input-error :messages="$errors->get('password')" class="mt-2" />
+                <x-input-error id="delete-account-password-error" :messages="$errors->get('password')" />
             </div>
 
-            <div class="mt-6 flex justify-end">
-                <x-secondary-button x-on:click="$dispatch('close')">
-                    {{ __('Cancel') }}
-                </x-secondary-button>
-
-                <x-danger-button class="ms-3">
-                    {{ __('Delete Account') }}
+            <div class="ui-modal-footer">
+                <x-secondary-button type="button" x-on:click="$dispatch('close')" class="w-full sm:w-auto">Batal</x-secondary-button>
+                <x-danger-button type="submit" wire:loading.attr="disabled" wire:target="deleteUser" class="w-full sm:w-auto">
+                    <span wire:loading.remove wire:target="deleteUser">Hapus akun</span>
+                    <span wire:loading wire:target="deleteUser">Menghapus…</span>
                 </x-danger-button>
             </div>
         </form>

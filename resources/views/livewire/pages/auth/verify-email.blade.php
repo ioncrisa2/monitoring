@@ -36,23 +36,24 @@ new #[Layout('layouts.guest')] class extends Component
 }; ?>
 
 <div>
-    <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-        {{ __('Thanks for signing up! Before getting started, could you verify your email address by clicking on the link we just emailed to you? If you didn\'t receive the email, we will gladly send you another.') }}
-    </div>
+    <x-auth-heading title="Verifikasi Email" description="Buka tautan verifikasi yang telah dikirim ke email Anda sebelum melanjutkan." />
 
-    @if (session('status') == 'verification-link-sent')
-        <div class="mb-4 font-medium text-sm text-green-600 dark:text-green-400">
-            {{ __('A new verification link has been sent to the email address you provided during registration.') }}
-        </div>
+    @if(session('status') == 'verification-link-sent')
+        <x-flash-message :dismissible="false" class="mb-5">Tautan verifikasi baru telah dikirim.</x-flash-message>
     @endif
 
-    <div class="mt-4 flex items-center justify-between">
-        <x-primary-button wire:click="sendVerification">
-            {{ __('Resend Verification Email') }}
+    <div class="space-y-3">
+        <x-primary-button
+            type="button"
+            wire:click="sendVerification"
+            wire:loading.attr="disabled"
+            wire:target="sendVerification"
+            class="w-full"
+        >
+            <span wire:loading.remove wire:target="sendVerification">Kirim ulang tautan</span>
+            <span wire:loading wire:target="sendVerification">Mengirim…</span>
         </x-primary-button>
 
-        <button wire:click="logout" type="submit" class="underline text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800">
-            {{ __('Log Out') }}
-        </button>
+        <button wire:click="logout" type="button" class="ui-btn ui-btn-ghost w-full">Keluar</button>
     </div>
 </div>

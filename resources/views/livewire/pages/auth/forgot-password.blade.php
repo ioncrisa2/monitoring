@@ -37,25 +37,40 @@ new #[Layout('layouts.guest')] class extends Component
 }; ?>
 
 <div>
-    <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-        {{ __('Forgot your password? No problem. Just let us know your email address and we will email you a password reset link that will allow you to choose a new one.') }}
-    </div>
+    <x-auth-heading title="Lupa Password" description="Masukkan email akun Anda. Kami akan mengirimkan tautan untuk membuat password baru." />
 
-    <!-- Session Status -->
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+    <x-auth-session-status class="mb-5" :status="session('status')" />
 
-    <form wire:submit="sendPasswordResetLink">
-        <!-- Email Address -->
+    <form wire:submit="sendPasswordResetLink" class="space-y-5">
         <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input wire:model="email" id="email" class="block mt-1 w-full" type="email" name="email" required autofocus />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+            <x-input-label for="email" value="Email" />
+            <x-text-input
+                wire:model="email"
+                id="email"
+                type="email"
+                name="email"
+                required
+                autofocus
+                autocomplete="email"
+                class="mt-1"
+                aria-describedby="forgot-email-error"
+                aria-invalid="{{ $errors->has('email') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="forgot-email-error" :messages="$errors->get('email')" />
         </div>
 
-        <div class="flex items-center justify-end mt-4">
-            <x-primary-button>
-                {{ __('Email Password Reset Link') }}
-            </x-primary-button>
-        </div>
+        <x-primary-button
+            type="submit"
+            wire:loading.attr="disabled"
+            wire:target="sendPasswordResetLink"
+            class="w-full"
+        >
+            <span wire:loading.remove wire:target="sendPasswordResetLink">Kirim tautan reset</span>
+            <span wire:loading wire:target="sendPasswordResetLink">Mengirim…</span>
+        </x-primary-button>
     </form>
+
+    <div class="mt-5 text-center">
+        <a href="{{ route('login') }}" wire:navigate class="ui-text-action">Kembali ke halaman masuk</a>
+    </div>
 </div>

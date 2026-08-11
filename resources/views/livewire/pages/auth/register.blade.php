@@ -37,52 +37,87 @@ new #[Layout('layouts.guest')] class extends Component
 }; ?>
 
 <div>
-    <form wire:submit="register">
-        <!-- Name -->
+    <x-auth-heading title="Buat Akun" description="Lengkapi identitas dan kredensial untuk membuat akun baru." />
+
+    <form wire:submit="register" class="space-y-4">
         <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input wire:model="name" id="name" class="block mt-1 w-full" type="text" name="name" required autofocus autocomplete="name" />
-            <x-input-error :messages="$errors->get('name')" class="mt-2" />
+            <x-input-label for="name" value="Nama lengkap" />
+            <x-text-input
+                wire:model="name"
+                id="name"
+                type="text"
+                name="name"
+                required
+                autofocus
+                autocomplete="name"
+                class="mt-1"
+                aria-describedby="register-name-error"
+                aria-invalid="{{ $errors->has('name') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="register-name-error" :messages="$errors->get('name')" />
         </div>
 
-        <!-- Email Address -->
-        <div class="mt-4">
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input wire:model="email" id="email" class="block mt-1 w-full" type="email" name="email" required autocomplete="username" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+        <div>
+            <x-input-label for="email" value="Email" />
+            <x-text-input
+                wire:model="email"
+                id="email"
+                type="email"
+                name="email"
+                required
+                autocomplete="username"
+                class="mt-1"
+                aria-describedby="register-email-error"
+                aria-invalid="{{ $errors->has('email') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="register-email-error" :messages="$errors->get('email')" />
         </div>
 
-        <!-- Password -->
-        <div class="mt-4">
-            <x-input-label for="password" :value="__('Password')" />
-
-            <x-text-input wire:model="password" id="password" class="block mt-1 w-full"
-                            type="password"
-                            name="password"
-                            required autocomplete="new-password" />
-
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
+        <div>
+            <x-input-label for="password" value="Password" />
+            <x-text-input
+                wire:model="password"
+                id="password"
+                type="password"
+                name="password"
+                required
+                autocomplete="new-password"
+                class="mt-1"
+                aria-describedby="register-password-error"
+                aria-invalid="{{ $errors->has('password') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="register-password-error" :messages="$errors->get('password')" />
         </div>
 
-        <!-- Confirm Password -->
-        <div class="mt-4">
-            <x-input-label for="password_confirmation" :value="__('Confirm Password')" />
-
-            <x-text-input wire:model="password_confirmation" id="password_confirmation" class="block mt-1 w-full"
-                            type="password"
-                            name="password_confirmation" required autocomplete="new-password" />
-
-            <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
+        <div>
+            <x-input-label for="password_confirmation" value="Konfirmasi password" />
+            <x-text-input
+                wire:model="password_confirmation"
+                id="password_confirmation"
+                type="password"
+                name="password_confirmation"
+                required
+                autocomplete="new-password"
+                class="mt-1"
+                aria-describedby="register-password-confirmation-error"
+                aria-invalid="{{ $errors->has('password_confirmation') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="register-password-confirmation-error" :messages="$errors->get('password_confirmation')" />
         </div>
 
-        <div class="flex items-center justify-end mt-4">
-            <a class="underline text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800" href="{{ route('login') }}" wire:navigate>
-                {{ __('Already registered?') }}
-            </a>
-
-            <x-primary-button class="ms-4">
-                {{ __('Register') }}
-            </x-primary-button>
-        </div>
+        <x-primary-button
+            type="submit"
+            wire:loading.attr="disabled"
+            wire:target="register"
+            class="w-full"
+        >
+            <span wire:loading.remove wire:target="register">Daftar</span>
+            <span wire:loading wire:target="register">Membuat akun…</span>
+        </x-primary-button>
     </form>
+
+    <p class="mt-5 text-center text-sm text-ink-secondary">
+        Sudah memiliki akun?
+        <a href="{{ route('login') }}" wire:navigate class="ui-text-action">Masuk</a>
+    </p>
 </div>

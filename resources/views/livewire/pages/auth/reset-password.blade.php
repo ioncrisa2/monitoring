@@ -70,36 +70,66 @@ new #[Layout('layouts.guest')] class extends Component
 }; ?>
 
 <div>
-    <form wire:submit="resetPassword">
-        <!-- Email Address -->
+    <x-auth-heading title="Atur Ulang Password" description="Buat password baru untuk akun yang terhubung dengan tautan reset ini." />
+
+    <form wire:submit="resetPassword" class="space-y-4">
         <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input wire:model="email" id="email" class="block mt-1 w-full" type="email" name="email" required autofocus autocomplete="username" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+            <x-input-label for="email" value="Email" />
+            <x-text-input
+                wire:model="email"
+                id="email"
+                type="email"
+                name="email"
+                required
+                autofocus
+                autocomplete="username"
+                class="mt-1"
+                aria-describedby="reset-email-error"
+                aria-invalid="{{ $errors->has('email') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="reset-email-error" :messages="$errors->get('email')" />
         </div>
 
-        <!-- Password -->
-        <div class="mt-4">
-            <x-input-label for="password" :value="__('Password')" />
-            <x-text-input wire:model="password" id="password" class="block mt-1 w-full" type="password" name="password" required autocomplete="new-password" />
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
+        <div>
+            <x-input-label for="password" value="Password baru" />
+            <x-text-input
+                wire:model="password"
+                id="password"
+                type="password"
+                name="password"
+                required
+                autocomplete="new-password"
+                class="mt-1"
+                aria-describedby="reset-password-error"
+                aria-invalid="{{ $errors->has('password') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="reset-password-error" :messages="$errors->get('password')" />
         </div>
 
-        <!-- Confirm Password -->
-        <div class="mt-4">
-            <x-input-label for="password_confirmation" :value="__('Confirm Password')" />
-
-            <x-text-input wire:model="password_confirmation" id="password_confirmation" class="block mt-1 w-full"
-                          type="password"
-                          name="password_confirmation" required autocomplete="new-password" />
-
-            <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
+        <div>
+            <x-input-label for="password_confirmation" value="Konfirmasi password baru" />
+            <x-text-input
+                wire:model="password_confirmation"
+                id="password_confirmation"
+                type="password"
+                name="password_confirmation"
+                required
+                autocomplete="new-password"
+                class="mt-1"
+                aria-describedby="reset-password-confirmation-error"
+                aria-invalid="{{ $errors->has('password_confirmation') ? 'true' : 'false' }}"
+            />
+            <x-input-error id="reset-password-confirmation-error" :messages="$errors->get('password_confirmation')" />
         </div>
 
-        <div class="flex items-center justify-end mt-4">
-            <x-primary-button>
-                {{ __('Reset Password') }}
-            </x-primary-button>
-        </div>
+        <x-primary-button
+            type="submit"
+            wire:loading.attr="disabled"
+            wire:target="resetPassword"
+            class="w-full"
+        >
+            <span wire:loading.remove wire:target="resetPassword">Simpan password baru</span>
+            <span wire:loading wire:target="resetPassword">Menyimpan…</span>
+        </x-primary-button>
     </form>
 </div>

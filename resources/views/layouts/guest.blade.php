@@ -5,26 +5,43 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
+        <title>{{ config('app.name', 'KJPP Monitoring') }}</title>
 
-        <!-- Fonts -->
+        <script>
+            (function() {
+                const theme = localStorage.getItem('theme');
+                if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            })();
+        </script>
+
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
 
-        <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="font-sans text-gray-900 antialiased">
-        <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100 dark:bg-gray-900">
-            <div>
-                <a href="/" wire:navigate>
-                    <x-application-logo class="w-20 h-20 fill-current text-gray-500" />
+    <body class="bg-canvas font-sans text-ink antialiased">
+        <main class="flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6">
+            <div class="w-full max-w-md">
+                <a href="/" wire:navigate class="mx-auto mb-6 flex w-fit items-center gap-3 rounded-ui-sm focus-visible:outline-offset-4" aria-label="Kembali ke beranda KJPP Monitoring">
+                    <x-application-logo class="size-10 text-brand" />
+                    <span>
+                        <span class="block text-base font-semibold leading-5 text-ink">KJPP Monitoring</span>
+                        <span class="block text-xs leading-5 text-ink-muted">Sistem operasional internal</span>
+                    </span>
                 </a>
-            </div>
 
-            <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white dark:bg-gray-800 shadow-md overflow-hidden sm:rounded-lg">
-                {{ $slot }}
+                <div class="ui-surface px-6 py-7 sm:px-8 sm:py-8">
+                    {{ $slot }}
+                </div>
+
+                <p class="mt-6 text-center text-xs leading-5 text-ink-muted">
+                    Akses terbatas untuk pengguna yang berwenang.
+                </p>
             </div>
-        </div>
+        </main>
     </body>
 </html>
