@@ -1,10 +1,20 @@
 @php($formId = $formId ?? 'offer')
+@php($numberLocked = $numberLocked ?? false)
+@php($numberPreviewOnly = $numberPreviewOnly ?? false)
 
 <div class="space-y-8">
     <section aria-labelledby="{{ $formId }}-identity-heading">
         <div class="mb-4">
             <h2 id="{{ $formId }}-identity-heading" class="ui-section-heading">Identitas penawaran</h2>
-            <p class="ui-section-description">Tentukan nomor urut, tanggal, dan cabang penerbit penawaran.</p>
+            <p class="ui-section-description">
+                @if($numberPreviewOnly)
+                    Pilih tanggal dan cabang penerbit; nomor urut final ditetapkan otomatis saat penyimpanan.
+                @elseif($numberLocked)
+                    Identitas nomor sudah dialokasikan. Data lain pada penawaran tetap dapat diperbarui.
+                @else
+                    Tentukan nomor urut, tanggal, dan cabang penerbit penawaran legacy.
+                @endif
+            </p>
         </div>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -15,12 +25,20 @@
                     wire:model.live="sequence_no"
                     type="number"
                     min="1"
+                    :disabled="$numberLocked"
+                    :readonly="$numberPreviewOnly"
                     class="mt-1"
                     aria-describedby="{{ $formId }}-sequence-help {{ $formId }}-sequence-error"
                     aria-invalid="{{ $errors->has('sequence_no') ? 'true' : 'false' }}"
                 />
                 <p id="{{ $formId }}-sequence-help" class="ui-help">
-                    Nomor terakhir tahun {{ \Carbon\Carbon::parse($offer_date ?: now())->year }}: {{ $this->lastSequenceForYear() }}
+                    @if($numberLocked)
+                        Nomor sudah dialokasikan dan tidak dapat diubah.
+                    @elseif($numberPreviewOnly)
+                        Pratinjau urutan berikutnya; nomor final ditetapkan server saat disimpan.
+                    @else
+                        Nomor terakhir tahun {{ \Carbon\Carbon::parse($offer_date ?: now())->year }}: {{ $this->lastSequenceForYear() }}
+                    @endif
                 </p>
                 <x-input-error id="{{ $formId }}-sequence-error" :messages="$errors->get('sequence_no')" />
             </div>
@@ -31,6 +49,7 @@
                     id="{{ $formId }}-offer-date"
                     wire:model.live="offer_date"
                     type="date"
+                    :disabled="$numberLocked"
                     class="mt-1"
                     aria-describedby="{{ $formId }}-offer-date-error"
                     aria-invalid="{{ $errors->has('offer_date') ? 'true' : 'false' }}"
@@ -43,6 +62,7 @@
                 <x-select-input
                     id="{{ $formId }}-branch"
                     wire:model.live="branch_id"
+                    :disabled="$numberLocked"
                     class="mt-1"
                     aria-describedby="{{ $formId }}-branch-error"
                     aria-invalid="{{ $errors->has('branch_id') ? 'true' : 'false' }}"
@@ -57,10 +77,17 @@
         </div>
 
         <div class="ui-surface-subtle mt-4 px-4 py-3" role="status" aria-live="polite">
-            <div class="text-xs font-medium text-ink-muted">Nomor penawaran otomatis</div>
+            <div class="text-xs font-medium text-ink-muted">
+                {{ $numberLocked ? 'Nomor penawaran terkunci' : 'Pratinjau nomor penawaran otomatis' }}
+            </div>
             <output class="mt-1 block break-all font-mono text-sm font-semibold text-ink">
-                {{ $offer_no ?: 'Pilih cabang dan isi nomor urut untuk melihat pratinjau' }}
+                {{ $offer_no ?: ($numberPreviewOnly ? 'Pilih cabang untuk melihat pratinjau' : 'Pilih cabang dan isi nomor urut untuk melihat pratinjau') }}
             </output>
+            @if($numberPreviewOnly)
+                <p class="mt-2 text-xs text-ink-muted">Urutan bersifat global per tahun. Perubahan data oleh pengguna lain dapat membuat nomor final berbeda dari pratinjau ini.</p>
+            @elseif($numberLocked)
+                <p class="mt-2 text-xs text-ink-muted">Nomor urut, tanggal surat, dan cabang penerbit menjadi satu identitas yang tidak dapat diedit setelah dialokasikan.</p>
+            @endif
         </div>
     </section>
 

@@ -2,6 +2,7 @@
     @php
         $categoryLabels = [
             'Akses Menu Navigasi' => 'Navigasi',
+            'Dokumen Penawaran' => 'Dokumen penawaran',
             'Manajemen Pengguna' => 'Pengguna',
             'Workflow Pekerjaan / Work Order' => 'Workflow pekerjaan',
         ];
@@ -15,6 +16,10 @@
             'menu.audit-logs' => 'Jejak audit',
             'menu.master-users' => 'Pengguna dan peran',
             'menu.master-data' => 'Master data',
+            'offers.documents.view' => 'Lihat dokumen penawaran',
+            'offers.documents.manage' => 'Kelola draft dokumen',
+            'offers.documents.generate-draft' => 'Buat pratinjau PDF draft',
+            'offers.cross-branch' => 'Akses penawaran lintas cabang',
             'users.manage' => 'Kelola pengguna',
             'work-orders.assign-pic' => 'Atur PIC',
             'work-orders.change-status' => 'Ubah status',

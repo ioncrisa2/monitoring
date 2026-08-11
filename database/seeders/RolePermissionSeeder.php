@@ -34,6 +34,12 @@ class RolePermissionSeeder extends Seeder
             'work-orders.edit-sla',
             'work-orders.survey',
             'work-orders.review',
+
+            // Automatic offer document permissions
+            'offers.documents.view',
+            'offers.documents.manage',
+            'offers.documents.generate-draft',
+            'offers.cross-branch',
         ];
 
         foreach ($permissions as $permission) {
@@ -59,6 +65,9 @@ class RolePermissionSeeder extends Seeder
             'work-orders.edit-sla',
             'work-orders.survey',
             'work-orders.review',
+            'offers.documents.view',
+            'offers.documents.manage',
+            'offers.documents.generate-draft',
         ]);
 
         // Admin: Access to dashboard, offers, work orders, change status
@@ -68,6 +77,9 @@ class RolePermissionSeeder extends Seeder
             'menu.offers',
             'menu.work-orders',
             'work-orders.change-status',
+            'offers.documents.view',
+            'offers.documents.manage',
+            'offers.documents.generate-draft',
         ]);
 
         // Reviewer: Access to dashboard, work-orders, change status, review

@@ -100,6 +100,17 @@
                                 <td><x-offer-outcome-badge :outcome="$offer->outcome" /></td>
                                 <td>
                                     <div class="flex flex-wrap justify-end gap-1">
+                                        @can('viewDocument', $offer)
+                                            <a
+                                                href="{{ route('offers.documents.edit', $offer) }}"
+                                                wire:navigate
+                                                class="ui-text-action"
+                                                aria-label="Lengkapi dokumen penawaran {{ $offer->offer_no }}"
+                                            >
+                                                Lengkapi dokumen
+                                            </a>
+                                        @endcan
+
                                         @if($offer->outcome === 'DITERIMA' && $offer->workOrder)
                                             <a
                                                 href="{{ route('work-orders.show', $offer->workOrder->id) }}"
@@ -160,7 +171,11 @@
 
             <form wire:submit="save">
                 <div class="ui-modal-body">
-                    @include('livewire.offers.partials.form-fields', ['formId' => 'edit-offer'])
+                    @include('livewire.offers.partials.form-fields', [
+                        'formId' => 'edit-offer',
+                        'numberLocked' => $numberLocked,
+                        'numberPreviewOnly' => false,
+                    ])
                 </div>
                 <div class="ui-modal-footer">
                     <x-secondary-button type="button" x-on:click="$dispatch('close')" class="w-full sm:w-auto">Batal</x-secondary-button>

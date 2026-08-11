@@ -15,7 +15,11 @@
         </header>
 
         <form wire:submit="save">
-            @include('livewire.offers.partials.form-fields', ['formId' => 'create-offer'])
+            @include('livewire.offers.partials.form-fields', [
+                'formId' => 'create-offer',
+                'numberLocked' => false,
+                'numberPreviewOnly' => true,
+            ])
 
             <div class="mt-8 flex flex-col-reverse gap-2 border-t border-line pt-5 sm:flex-row sm:justify-end">
                 <a href="{{ route('offers.index') }}" wire:navigate class="ui-btn ui-btn-secondary w-full sm:w-auto">Batal</a>

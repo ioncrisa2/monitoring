@@ -1,0 +1,559 @@
+<div>
+    @php
+        $engagement = $draft['engagement'] ?? [];
+        $subjects = $draft['subjects'] ?? [];
+        $feeItems = $draft['fee_items'] ?? [];
+        $paymentTerms = $draft['payment_terms'] ?? [];
+        $requirements = $draft['requirements'] ?? [];
+        $feeTotal = collect($feeItems)->sum(fn ($item) => (float) ($item['quantity'] ?? 0) * (int) ($item['unit_amount'] ?? 0));
+        $termTotal = collect($paymentTerms)->sum(fn ($term) => (int) ($term['percentage_bps'] ?? 0)) / 100;
+        $assetCount = collect($subjects)->sum(fn ($subject) => count($subject['assets'] ?? []));
+    @endphp
+
+    <div class="ui-page space-y-6">
+        <nav aria-label="Breadcrumb">
+            <a href="{{ route('offers.index') }}" wire:navigate class="ui-text-action -ml-2">
+                <span aria-hidden="true">&larr;</span>
+                Penawaran
+            </a>
+        </nav>
+
+        <header class="ui-page-header">
+            <div>
+                <div class="mb-2 flex flex-wrap items-center gap-2">
+                    <span class="ui-badge ui-badge-neutral">Draft dokumen</span>
+                    <span class="font-mono text-xs text-ink-muted">{{ $offer->offer_no }}</span>
+                </div>
+                <h1 class="ui-page-title">Dokumen Penawaran</h1>
+                <p class="ui-page-description">Lengkapi data surat, objek, biaya, dan persyaratan sebelum membuat pratinjau PDF.</p>
+            </div>
+        </header>
+
+        @if(session()->has('message'))
+            <x-flash-message>{{ session('message') }}</x-flash-message>
+        @endif
+
+        @if(!$domainReady)
+            <div class="ui-surface-subtle border-l-4 border-amber-500 px-4 py-3 text-sm text-ink-secondary" role="status">
+                Editor dapat ditinjau, tetapi penyimpanan menunggu fondasi domain dokumen penawaran tersedia.
+            </div>
+        @endif
+
+        @if(!$canManage)
+            <div class="ui-surface-subtle px-4 py-3 text-sm text-ink-secondary" role="status">
+                Anda memiliki akses baca. Perubahan hanya dapat disimpan oleh pengguna dengan hak kelola draft.
+            </div>
+        @endif
+
+        @if($errors->any())
+            <div class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300" role="alert" aria-labelledby="document-validation-heading">
+                <h2 id="document-validation-heading" class="font-semibold">Periksa kembali data berikut</h2>
+                <ul class="mt-2 list-disc space-y-1 pl-5">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <form wire:submit="saveDraft">
+            <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+                <fieldset class="min-w-0 space-y-10" @disabled(!$canManage)>
+                    <legend class="sr-only">Data draft dokumen penawaran</legend>
+
+                    <section aria-labelledby="document-recipient-heading">
+                        <div class="mb-4">
+                            <h2 id="document-recipient-heading" class="ui-section-heading">1. Penerima dan referensi</h2>
+                            <p class="ui-section-description">Informasi ini tampil pada bagian pembuka surat penawaran.</p>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <x-input-label for="document-issue-city" value="Kota penerbit" />
+                                <x-text-input id="document-issue-city" wire:model="draft.engagement.issue_city" class="mt-1" placeholder="Jakarta" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-recipient-attention" value="Ditujukan kepada (opsional)" />
+                                <x-text-input id="document-recipient-attention" wire:model="draft.engagement.recipient_attention" class="mt-1" placeholder="Nama atau divisi penerima" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-recipient-organization" value="Organisasi penerima" />
+                                <x-text-input id="document-recipient-organization" wire:model="draft.engagement.recipient_organization" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-recipient-city" value="Kota tujuan" />
+                                <x-text-input id="document-recipient-city" wire:model="draft.engagement.recipient_city" class="mt-1" />
+                            </div>
+                            <div class="md:col-span-2">
+                                <x-input-label for="document-recipient-address" value="Alamat penerima" />
+                                <x-textarea-input id="document-recipient-address" wire:model="draft.engagement.recipient_address" rows="3" class="mt-1"></x-textarea-input>
+                            </div>
+                            <div class="md:col-span-2">
+                                <x-input-label for="document-subject" value="Perihal" />
+                                <x-text-input id="document-subject" wire:model="draft.engagement.subject" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-reference-type" value="Sumber permintaan" />
+                                <x-select-input id="document-reference-type" wire:model="draft.engagement.request_reference_type" class="mt-1">
+                                    <option value="none">Tanpa referensi</option>
+                                    <option value="letter">Surat</option>
+                                    <option value="email">Email</option>
+                                    <option value="verbal">Lisan</option>
+                                    <option value="other">Lainnya</option>
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-reference-number" value="Nomor referensi (opsional)" />
+                                <x-text-input id="document-reference-number" wire:model="draft.engagement.request_reference_no" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-reference-date" value="Tanggal referensi (opsional)" />
+                                <x-text-input id="document-reference-date" wire:model="draft.engagement.request_reference_date" type="date" class="mt-1" />
+                            </div>
+                            <div class="md:col-span-2">
+                                <x-input-label for="document-opening-context" value="Konteks pembuka (opsional)" />
+                                <x-textarea-input id="document-opening-context" wire:model="draft.engagement.opening_context" rows="3" class="mt-1" placeholder="Keterangan tambahan tentang permintaan penilaian"></x-textarea-input>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="border-t border-line pt-8" aria-labelledby="document-scope-heading">
+                        <div class="mb-4">
+                            <h2 id="document-scope-heading" class="ui-section-heading">2. Lingkup dan keluaran</h2>
+                            <p class="ui-section-description">Satu sumber data untuk tujuan, dasar nilai, bentuk laporan, dan durasi pekerjaan.</p>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            <div>
+                                <x-input-label for="document-ownership-form" value="Bentuk kepemilikan" />
+                                <x-text-input id="document-ownership-form" wire:model="draft.engagement.ownership_form" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-currency" value="Mata uang" />
+                                <x-select-input id="document-currency" wire:model="draft.engagement.currency" class="mt-1">
+                                    <option value="IDR">IDR - Rupiah</option>
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-valuation-date" value="Tanggal penilaian" />
+                                <x-text-input id="document-valuation-date" wire:model="draft.engagement.valuation_date" type="date" class="mt-1" />
+                            </div>
+                            <div class="md:col-span-2">
+                                <x-input-label for="document-purpose" value="Maksud dan tujuan penilaian" />
+                                <x-text-input id="document-purpose" wire:model="draft.engagement.purpose" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-valuation-basis" value="Dasar nilai" />
+                                <x-text-input id="document-valuation-basis" wire:model="draft.engagement.valuation_basis" class="mt-1" />
+                            </div>
+                            <div class="md:col-span-2">
+                                <x-input-label for="document-valuation-rule" value="Aturan tanggal penilaian" />
+                                <x-text-input id="document-valuation-rule" wire:model="draft.engagement.valuation_date_rule" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-investigation-level" value="Tingkat investigasi" />
+                                <x-select-input id="document-investigation-level" wire:model="draft.engagement.investigation_level" class="mt-1">
+                                    <option value="desktop">Kajian dokumen</option>
+                                    <option value="limited">Investigasi terbatas</option>
+                                    <option value="full">Inspeksi penuh</option>
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-report-format" value="Bentuk laporan" />
+                                <x-select-input id="document-report-format" wire:model="draft.engagement.report_format" class="mt-1">
+                                    <option value="summary">Ringkas</option>
+                                    <option value="complete">Lengkap</option>
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-report-language" value="Bahasa laporan" />
+                                <x-select-input id="document-report-language" wire:model="draft.engagement.report_language" class="mt-1">
+                                    <option value="id">Indonesia</option>
+                                    <option value="en">Inggris</option>
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-report-copies" value="Jumlah eksemplar" />
+                                <x-text-input id="document-report-copies" wire:model="draft.engagement.report_copies" type="number" min="1" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-completion-days" value="Durasi" />
+                                <x-text-input id="document-completion-days" wire:model="draft.engagement.completion_days" type="number" min="1" class="mt-1" />
+                            </div>
+                            <div>
+                                <x-input-label for="document-completion-day-type" value="Jenis hari" />
+                                <x-select-input id="document-completion-day-type" wire:model="draft.engagement.completion_day_type" class="mt-1">
+                                    <option value="business">Hari kerja</option>
+                                    <option value="calendar">Hari kalender</option>
+                                </x-select-input>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="border-t border-line pt-8" aria-labelledby="document-subjects-heading">
+                        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <h2 id="document-subjects-heading" class="ui-section-heading">3. Pihak dan objek penilaian</h2>
+                                <p class="ui-section-description">Setiap objek berada di bawah pihak yang benar agar uraian dan biaya tetap konsisten.</p>
+                            </div>
+                            <x-secondary-button type="button" wire:click="addSubject">Tambah pihak</x-secondary-button>
+                        </div>
+
+                        <div class="space-y-6">
+                            @foreach($subjects as $subjectIndex => $subject)
+                                <article class="border border-line p-4 sm:p-5" wire:key="document-subject-{{ $subjectIndex }}">
+                                    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                        <div class="flex items-center gap-2">
+                                            <h3 class="font-semibold text-ink">Pihak {{ $subjectIndex + 1 }}</h3>
+                                            @if($subject['is_primary'] ?? false)
+                                                <span class="ui-badge ui-badge-info">Utama</span>
+                                            @endif
+                                        </div>
+                                        <div class="flex flex-wrap gap-1">
+                                            @if(!($subject['is_primary'] ?? false))
+                                                <button type="button" wire:click="setPrimarySubject({{ $subjectIndex }})" class="ui-text-action">Jadikan utama</button>
+                                            @endif
+                                            <button type="button" wire:click="removeSubject({{ $subjectIndex }})" class="ui-text-action-danger">Hapus pihak</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid gap-4 md:grid-cols-2">
+                                        <div>
+                                            <x-input-label for="document-subject-name-{{ $subjectIndex }}" value="Nama pihak/debitur" />
+                                            <x-text-input id="document-subject-name-{{ $subjectIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.name_snapshot" class="mt-1" />
+                                        </div>
+                                        <div>
+                                            <x-input-label for="document-subject-identifier-{{ $subjectIndex }}" value="Nomor identitas (opsional)" />
+                                            <x-text-input id="document-subject-identifier-{{ $subjectIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.identifier_snapshot" class="mt-1" />
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <x-input-label for="document-subject-address-{{ $subjectIndex }}" value="Alamat pihak" />
+                                            <x-textarea-input id="document-subject-address-{{ $subjectIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.address_snapshot" rows="2" class="mt-1"></x-textarea-input>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-6 border-t border-line pt-5">
+                                        <div class="mb-4 flex items-center justify-between gap-3">
+                                            <h4 class="text-sm font-semibold text-ink">Objek milik pihak ini</h4>
+                                            <button type="button" wire:click="addAsset({{ $subjectIndex }})" class="ui-text-action">Tambah aset</button>
+                                        </div>
+
+                                        <div class="space-y-5">
+                                            @forelse($subject['assets'] ?? [] as $assetIndex => $asset)
+                                                <div class="ui-surface-subtle p-4" wire:key="document-asset-{{ $subjectIndex }}-{{ $assetIndex }}">
+                                                    <div class="mb-3 flex items-center justify-between gap-3">
+                                                        <h5 class="text-sm font-semibold text-ink">Aset {{ $assetIndex + 1 }}</h5>
+                                                        <button type="button" wire:click="removeAsset({{ $subjectIndex }}, {{ $assetIndex }})" class="ui-text-action-danger">Hapus aset</button>
+                                                    </div>
+
+                                                    <div class="grid gap-4 md:grid-cols-2">
+                                                        <div>
+                                                            <x-input-label for="document-asset-type-{{ $subjectIndex }}-{{ $assetIndex }}" value="Jenis aset" />
+                                                            <x-select-input id="document-asset-type-{{ $subjectIndex }}-{{ $assetIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.asset_type" class="mt-1">
+                                                                <option value="tanah">Tanah</option>
+                                                                <option value="bangunan">Bangunan</option>
+                                                                <option value="mesin">Mesin/peralatan</option>
+                                                                <option value="kendaraan">Kendaraan</option>
+                                                                <option value="inventaris">Inventaris</option>
+                                                                <option value="lainnya">Lainnya</option>
+                                                            </x-select-input>
+                                                        </div>
+                                                        <div>
+                                                            <x-input-label for="document-asset-description-{{ $subjectIndex }}-{{ $assetIndex }}" value="Uraian objek" />
+                                                            <x-text-input id="document-asset-description-{{ $subjectIndex }}-{{ $assetIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.description" class="mt-1" />
+                                                        </div>
+                                                        <div class="md:col-span-2">
+                                                            <x-input-label for="document-asset-address-{{ $subjectIndex }}-{{ $assetIndex }}" value="Alamat objek" />
+                                                            <x-textarea-input id="document-asset-address-{{ $subjectIndex }}-{{ $assetIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.address" rows="2" class="mt-1"></x-textarea-input>
+                                                        </div>
+                                                        <div>
+                                                            <x-input-label for="document-asset-city-{{ $subjectIndex }}-{{ $assetIndex }}" value="Kota" />
+                                                            <x-text-input id="document-asset-city-{{ $subjectIndex }}-{{ $assetIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.city" class="mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <x-input-label for="document-asset-province-{{ $subjectIndex }}-{{ $assetIndex }}" value="Provinsi" />
+                                                            <x-text-input id="document-asset-province-{{ $subjectIndex }}-{{ $assetIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.province" class="mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <x-input-label for="document-land-area-{{ $subjectIndex }}-{{ $assetIndex }}" value="Luas tanah (m²)" />
+                                                            <x-text-input id="document-land-area-{{ $subjectIndex }}-{{ $assetIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.land_area_m2" type="number" min="0" step="0.01" class="mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <x-input-label for="document-building-area-{{ $subjectIndex }}-{{ $assetIndex }}" value="Luas bangunan (m²)" />
+                                                            <x-text-input id="document-building-area-{{ $subjectIndex }}-{{ $assetIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.building_area_m2" type="number" min="0" step="0.01" class="mt-1" />
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mt-5 border-t border-line pt-4">
+                                                        <div class="mb-3 flex items-center justify-between gap-3">
+                                                            <h6 class="text-sm font-semibold text-ink">Dokumen kepemilikan</h6>
+                                                            <button type="button" wire:click="addAssetDocument({{ $subjectIndex }}, {{ $assetIndex }})" class="ui-text-action">Tambah dokumen</button>
+                                                        </div>
+
+                                                        <div class="space-y-3">
+                                                            @forelse($asset['documents'] ?? [] as $documentIndex => $document)
+                                                                <div class="grid gap-3 border-t border-line pt-3 first:border-t-0 first:pt-0 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]" wire:key="asset-document-{{ $subjectIndex }}-{{ $assetIndex }}-{{ $documentIndex }}">
+                                                                    <div>
+                                                                        <x-input-label for="asset-document-type-{{ $subjectIndex }}-{{ $assetIndex }}-{{ $documentIndex }}" value="Jenis dokumen" />
+                                                                        <x-text-input id="asset-document-type-{{ $subjectIndex }}-{{ $assetIndex }}-{{ $documentIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.documents.{{ $documentIndex }}.document_type" class="mt-1" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <x-input-label for="asset-document-no-{{ $subjectIndex }}-{{ $assetIndex }}-{{ $documentIndex }}" value="Nomor dokumen" />
+                                                                        <x-text-input id="asset-document-no-{{ $subjectIndex }}-{{ $assetIndex }}-{{ $documentIndex }}" wire:model="draft.subjects.{{ $subjectIndex }}.assets.{{ $assetIndex }}.documents.{{ $documentIndex }}.document_no" class="mt-1" />
+                                                                    </div>
+                                                                    <div class="flex items-end gap-1 pb-1">
+                                                                        @if(!($document['is_primary'] ?? false))
+                                                                            <button type="button" wire:click="setPrimaryAssetDocument({{ $subjectIndex }}, {{ $assetIndex }}, {{ $documentIndex }})" class="ui-text-action">Utama</button>
+                                                                        @endif
+                                                                        <button type="button" wire:click="removeAssetDocument({{ $subjectIndex }}, {{ $assetIndex }}, {{ $documentIndex }})" class="ui-text-action-danger" aria-label="Hapus dokumen kepemilikan {{ $documentIndex + 1 }}">Hapus</button>
+                                                                    </div>
+                                                                </div>
+                                                            @empty
+                                                                <p class="ui-help">Belum ada dokumen kepemilikan untuk aset ini.</p>
+                                                            @endforelse
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            @empty
+                                                <p class="ui-empty-state">Belum ada aset untuk pihak ini.</p>
+                                            @endforelse
+                                        </div>
+                                    </div>
+                                </article>
+                            @endforeach
+                        </div>
+                    </section>
+
+                    <section class="border-t border-line pt-8" aria-labelledby="document-commercial-heading">
+                        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <h2 id="document-commercial-heading" class="ui-section-heading">4. Biaya, pajak, dan termin</h2>
+                                <p class="ui-section-description">Nilai dokumen dihitung ulang oleh service domain dan disimpan sebagai snapshot.</p>
+                            </div>
+                            <x-secondary-button type="button" wire:click="addFeeItem">Tambah komponen biaya</x-secondary-button>
+                        </div>
+
+                        <div class="space-y-3">
+                            @foreach($feeItems as $feeIndex => $feeItem)
+                                <div class="grid items-end gap-3 border-b border-line pb-4 md:grid-cols-[minmax(0,1.5fr)_7rem_minmax(0,1fr)_auto]" wire:key="document-fee-{{ $feeIndex }}">
+                                    <div>
+                                        <x-input-label for="document-fee-label-{{ $feeIndex }}" value="Komponen" />
+                                        <x-text-input id="document-fee-label-{{ $feeIndex }}" wire:model="draft.fee_items.{{ $feeIndex }}.label" class="mt-1" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="document-fee-quantity-{{ $feeIndex }}" value="Jumlah" />
+                                        <x-text-input id="document-fee-quantity-{{ $feeIndex }}" wire:model="draft.fee_items.{{ $feeIndex }}.quantity" type="number" min="1" step="1" class="mt-1" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="document-fee-amount-{{ $feeIndex }}" value="Nilai satuan (Rp)" />
+                                        <x-text-input id="document-fee-amount-{{ $feeIndex }}" wire:model="draft.fee_items.{{ $feeIndex }}.unit_amount" type="number" min="0" step="1" class="mt-1" />
+                                    </div>
+                                    <button type="button" wire:click="removeFeeItem({{ $feeIndex }})" class="ui-text-action-danger mb-1">Hapus</button>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="mt-5 grid gap-4 md:grid-cols-3">
+                            <div>
+                                <x-input-label for="document-tax-inclusion" value="Perlakuan PPN" />
+                                <x-select-input id="document-tax-inclusion" wire:model="draft.engagement.tax_inclusion" class="mt-1">
+                                    <option value="excluded">Belum termasuk PPN</option>
+                                    <option value="included">Sudah termasuk PPN</option>
+                                    <option value="non_taxable">Tidak dikenakan PPN</option>
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-ppn-rate" value="Tarif PPN (bps)" />
+                                <x-text-input id="document-ppn-rate" wire:model="draft.engagement.ppn_rate_bps" type="number" min="0" step="1" class="mt-1" />
+                                <p class="ui-help">1100 bps = 11%</p>
+                            </div>
+                            <div>
+                                <x-input-label for="document-pph-rate" value="Tarif PPh (bps, opsional)" />
+                                <x-text-input id="document-pph-rate" wire:model="draft.engagement.pph_rate_bps" type="number" min="0" step="1" class="mt-1" />
+                            </div>
+                        </div>
+
+                        <fieldset class="mt-5">
+                            <legend class="text-sm font-medium text-ink">Biaya yang sudah termasuk</legend>
+                            <div class="mt-2 flex flex-wrap gap-5 text-sm text-ink-secondary">
+                                <label class="flex items-center gap-2">
+                                    <input wire:model="draft.engagement.cost_inclusions" type="checkbox" value="transportasi" class="size-4 rounded border-line-strong text-brand focus:ring-brand">
+                                    Transportasi
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input wire:model="draft.engagement.cost_inclusions" type="checkbox" value="akomodasi" class="size-4 rounded border-line-strong text-brand focus:ring-brand">
+                                    Akomodasi
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <div class="mt-6 flex items-end justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold text-ink">Termin pembayaran</h3>
+                                <p class="ui-help">Kosongkan bila dokumen tidak memerlukan pembagian termin.</p>
+                            </div>
+                            <button type="button" wire:click="addPaymentTerm" class="ui-text-action">Tambah termin</button>
+                        </div>
+
+                        <div class="mt-3 space-y-3">
+                            @foreach($paymentTerms as $termIndex => $term)
+                                <div class="grid items-end gap-3 md:grid-cols-[7rem_minmax(0,1fr)_8rem_auto]" wire:key="document-term-{{ $termIndex }}">
+                                    <div>
+                                        <x-input-label for="document-term-percent-{{ $termIndex }}" value="Persen (bps)" />
+                                        <x-text-input id="document-term-percent-{{ $termIndex }}" wire:model="draft.payment_terms.{{ $termIndex }}.percentage_bps" type="number" min="0" max="10000" class="mt-1" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="document-term-trigger-{{ $termIndex }}" value="Pemicu pembayaran" />
+                                        <x-text-input id="document-term-trigger-{{ $termIndex }}" wire:model="draft.payment_terms.{{ $termIndex }}.trigger_text" class="mt-1" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="document-term-due-{{ $termIndex }}" value="Jatuh tempo" />
+                                        <x-text-input id="document-term-due-{{ $termIndex }}" wire:model="draft.payment_terms.{{ $termIndex }}.due_days" type="number" min="0" class="mt-1" />
+                                    </div>
+                                    <button type="button" wire:click="removePaymentTerm({{ $termIndex }})" class="ui-text-action-danger mb-1">Hapus</button>
+                                </div>
+                            @endforeach
+                        </div>
+                    </section>
+
+                    <section class="border-t border-line pt-8" aria-labelledby="document-requirements-heading">
+                        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <h2 id="document-requirements-heading" class="ui-section-heading">5. Persyaratan dan catatan</h2>
+                                <p class="ui-section-description">Daftar data awal masuk ke klausul permintaan data; catatan internal tidak dicetak.</p>
+                            </div>
+                            <x-secondary-button type="button" wire:click="addRequirement">Tambah persyaratan</x-secondary-button>
+                        </div>
+
+                        <div class="space-y-3">
+                            @foreach($requirements as $requirementIndex => $requirement)
+                                <div class="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_9rem_auto]" wire:key="document-requirement-{{ $requirementIndex }}">
+                                    <div>
+                                        <x-input-label for="document-requirement-{{ $requirementIndex }}" value="Deskripsi persyaratan" />
+                                        <x-text-input id="document-requirement-{{ $requirementIndex }}" wire:model="draft.requirements.{{ $requirementIndex }}.description_snapshot" class="mt-1" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="document-requirement-style-{{ $requirementIndex }}" value="Penekanan" />
+                                        <x-select-input id="document-requirement-style-{{ $requirementIndex }}" wire:model="draft.requirements.{{ $requirementIndex }}.emphasis_style" class="mt-1">
+                                            <option value="normal">Normal</option>
+                                            <option value="bold">Tebal</option>
+                                            <option value="italic">Miring</option>
+                                            <option value="underline">Garis bawah</option>
+                                        </x-select-input>
+                                    </div>
+                                    <button type="button" wire:click="removeRequirement({{ $requirementIndex }})" class="ui-text-action-danger mb-1">Hapus</button>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="mt-5 grid gap-4 md:grid-cols-2">
+                            <div>
+                                <x-input-label for="document-special-assumptions" value="Asumsi khusus (opsional)" />
+                                <x-textarea-input id="document-special-assumptions" wire:model="draft.engagement.special_assumptions" rows="4" class="mt-1"></x-textarea-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-internal-note" value="Catatan internal" />
+                                <x-textarea-input id="document-internal-note" wire:model="draft.engagement.internal_note" rows="4" class="mt-1"></x-textarea-input>
+                                <p class="ui-help">Catatan ini tidak masuk ke PDF.</p>
+                            </div>
+                        </div>
+                    </section>
+                </fieldset>
+
+                <aside class="space-y-5 lg:sticky lg:top-20" aria-labelledby="document-summary-heading">
+                    <section class="ui-surface p-5">
+                        <h2 id="document-summary-heading" class="ui-section-heading">Ringkasan draft</h2>
+                        <dl class="mt-4 divide-y divide-line text-sm">
+                            <div class="flex justify-between gap-4 py-3 first:pt-0">
+                                <dt class="text-ink-muted">Cabang</dt>
+                                <dd class="text-right font-medium text-ink">{{ $offer->branch?->code ?? '—' }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-4 py-3">
+                                <dt class="text-ink-muted">Pihak</dt>
+                                <dd class="font-semibold text-ink tabular-nums">{{ count($subjects) }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-4 py-3">
+                                <dt class="text-ink-muted">Aset</dt>
+                                <dd class="font-semibold text-ink tabular-nums">{{ $assetCount }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-4 py-3">
+                                <dt class="text-ink-muted">Komponen biaya</dt>
+                                <dd class="font-semibold text-ink tabular-nums">{{ count($feeItems) }}</dd>
+                            </div>
+                            <div class="py-3">
+                                <dt class="text-ink-muted">Subtotal</dt>
+                                <dd class="mt-1 text-lg font-semibold text-ink tabular-nums">Rp {{ number_format($feeTotal, 0, ',', '.') }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-4 py-3 last:pb-0">
+                                <dt class="text-ink-muted">Total termin</dt>
+                                <dd class="font-semibold {{ $paymentTerms && $termTotal !== 100.0 ? 'text-red-700 dark:text-red-300' : 'text-ink' }} tabular-nums">{{ number_format($termTotal, 2, ',', '.') }}%</dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section class="ui-surface p-5" aria-labelledby="document-preflight-heading">
+                        <div class="flex items-center justify-between gap-3">
+                            <h2 id="document-preflight-heading" class="ui-section-heading">Preflight</h2>
+                            @if($preflight['errors'] === [] && $preflight['warnings'] === [])
+                                <span class="ui-badge ui-badge-neutral">Belum diperiksa</span>
+                            @elseif($preflight['errors'] === [])
+                                <span class="ui-badge ui-badge-success">Lolos</span>
+                            @else
+                                <span class="ui-badge ui-badge-danger">Perlu diperbaiki</span>
+                            @endif
+                        </div>
+
+                        @if($preflight['errors'] !== [])
+                            <div class="mt-4">
+                                <h3 class="text-sm font-semibold text-red-700 dark:text-red-300">Error</h3>
+                                <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700 dark:text-red-300">
+                                    @foreach($preflight['errors'] as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        @if($preflight['warnings'] !== [])
+                            <div class="mt-4">
+                                <h3 class="text-sm font-semibold text-amber-700 dark:text-amber-300">Peringatan</h3>
+                                <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-secondary">
+                                    @foreach($preflight['warnings'] as $warning)
+                                        <li>{{ $warning }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        @if($preflight['errors'] === [] && $preflight['warnings'] === [])
+                            <p class="mt-3 text-sm leading-6 text-ink-muted">Simpan perubahan, lalu jalankan pemeriksaan sebelum membuat PDF.</p>
+                        @endif
+                    </section>
+
+                    <div class="space-y-2">
+                        @if($canManage)
+                            <x-primary-button type="submit" wire:loading.attr="disabled" wire:target="saveDraft" class="w-full">
+                                <span wire:loading.remove wire:target="saveDraft">Simpan draft</span>
+                                <span wire:loading wire:target="saveDraft">Menyimpan…</span>
+                            </x-primary-button>
+                        @endif
+
+                        @if($canGenerateDraft)
+                            <x-secondary-button type="button" wire:click="checkPreflight" wire:loading.attr="disabled" wire:target="checkPreflight" class="w-full">
+                                <span wire:loading.remove wire:target="checkPreflight">Periksa kelengkapan</span>
+                                <span wire:loading wire:target="checkPreflight">Memeriksa…</span>
+                            </x-secondary-button>
+
+                            @if($rendererReady)
+                                <a href="{{ route('offers.documents.preview', $offer) }}" target="_blank" rel="noopener" class="ui-btn ui-btn-secondary w-full">Buka pratinjau PDF</a>
+                                <a href="{{ route('offers.documents.download', $offer) }}" class="ui-btn ui-btn-secondary w-full">Unduh PDF draft</a>
+                            @else
+                                <p class="ui-help text-center">Renderer PDF belum tersedia.</p>
+                            @endif
+                        @endif
+                    </div>
+                </aside>
+            </div>
+        </form>
+    </div>
+</div>

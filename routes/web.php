@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\OfferDocumentController;
 use App\Livewire\Audit\ActivityLogIndex;
 use App\Livewire\Dashboard;
 use App\Livewire\Imports\DataImport;
@@ -9,6 +10,7 @@ use App\Livewire\Master\Organizations;
 use App\Livewire\Master\RolesPermissions;
 use App\Livewire\Master\Users;
 use App\Livewire\Offers\Create as OffersCreate;
+use App\Livewire\Offers\DocumentEditor as OfferDocumentEditor;
 use App\Livewire\Offers\Index as OffersIndex;
 use App\Livewire\Reports\ProductionReport;
 use App\Livewire\WorkOrders\Index as WorkOrdersIndex;
@@ -27,6 +29,15 @@ Route::middleware(['auth'])->group(function () {
     // Penawaran & Pekerjaan Workflow
     Route::get('/offers', OffersIndex::class)->middleware('permission:menu.offers')->name('offers.index');
     Route::get('/offers/create', OffersCreate::class)->middleware('permission:menu.offers')->name('offers.create');
+    Route::get('/offers/{offer}/document', OfferDocumentEditor::class)
+        ->middleware('permission:offers.documents.view')
+        ->name('offers.documents.edit');
+    Route::get('/offers/{offer}/document/preview', [OfferDocumentController::class, 'preview'])
+        ->middleware(['permission:offers.documents.generate-draft', 'throttle:10,1'])
+        ->name('offers.documents.preview');
+    Route::get('/offers/{offer}/document/download', [OfferDocumentController::class, 'download'])
+        ->middleware(['permission:offers.documents.generate-draft', 'throttle:10,1'])
+        ->name('offers.documents.download');
     Route::get('/work-orders', WorkOrdersIndex::class)->middleware('permission:menu.work-orders')->name('work-orders.index');
     Route::get('/work-orders/{id}', WorkOrdersShow::class)->middleware('permission:menu.work-orders')->name('work-orders.show');
 
