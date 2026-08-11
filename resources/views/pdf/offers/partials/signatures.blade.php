@@ -1,4 +1,4 @@
-<table class="signatures" role="presentation">
+<table class="signatures" data-signing-mode="wet-ink" role="presentation">
     <tr>
         <td>
             <p>Hormat kami,</p>
@@ -19,7 +19,7 @@
             <p>{{ $snapshot['signatures']['issuer_title'] }}</p>
         </td>
         <td>
-            <p class="signature-name">Nama dan tanda tangan</p>
+            <p class="signature-name">Nama jelas dan tanda tangan basah</p>
 
             @if ($snapshot['signatures']['client_title'])
                 <p>{{ $snapshot['signatures']['client_title'] }}</p>

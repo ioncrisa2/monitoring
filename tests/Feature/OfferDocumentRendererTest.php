@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\DocumentSignerVersion;
 use App\Services\Offers\OfferDocumentRenderer;
 use InvalidArgumentException;
+use LogicException;
 use Tests\TestCase;
 
 class OfferDocumentRendererTest extends TestCase
@@ -51,6 +53,70 @@ class OfferDocumentRendererTest extends TestCase
         preg_match_all('/\/Type\s*\/Page\b/', $pdf, $pages);
 
         $this->assertGreaterThanOrEqual(2, count($pages[0]));
+        $this->assertStringNotContainsString('/Type /Sig', $pdf);
+        $this->assertStringNotContainsString('/SigFlags', $pdf);
+        $this->assertStringNotContainsString('/ByteRange', $pdf);
+        $this->assertStringNotContainsString('/DocMDP', $pdf);
+        $this->assertStringNotContainsString('/AcroForm', $pdf);
+    }
+
+    public function test_signature_block_is_for_wet_ink_and_rejects_embedded_signature_assets(): void
+    {
+        $snapshot = $this->draftSnapshot();
+        $snapshot['signatures'] += [
+            'signature_path' => 'SIGNATURE_PATH_SENTINEL',
+            'signature_url' => 'https://example.test/signature.png',
+            'signature_data_uri' => 'data:image/png;base64,SIGNATURE_DATA_SENTINEL',
+            'stamp_path' => 'STAMP_PATH_SENTINEL',
+            'stamp_url' => 'https://example.test/stamp.png',
+            'stamp_data_uri' => 'data:image/png;base64,STAMP_DATA_SENTINEL',
+        ];
+
+        $html = app(OfferDocumentRenderer::class)->renderHtml($snapshot);
+
+        preg_match('/<table class="signatures".*?<\/table>/s', $html, $matches);
+        $block = $matches[0] ?? '';
+
+        $this->assertStringContainsString('data-signing-mode="wet-ink"', $block);
+        $this->assertStringContainsString('Hormat kami', $block);
+        $this->assertStringContainsString('Menyetujui', $block);
+        $this->assertStringContainsString('Penandatangan Contoh', $block);
+        $this->assertStringContainsString('Nama jelas dan tanda tangan basah', $block);
+        $this->assertStringContainsString('class="signature-space"', $block);
+
+        foreach (['<img', '<svg', '<object', '<embed', 'data:image', 'http://', 'https://', 'file://', 'url(', 'SIGNATURE_', 'STAMP_'] as $forbidden) {
+            $this->assertStringNotContainsString($forbidden, $block);
+        }
+
+        $this->assertFalse(config('offer-documents.output.embedded_signature'));
+        $this->assertFalse(config('offer-documents.output.embedded_stamp'));
+        $this->assertFalse(config('offer-documents.output.signed_scan'));
+        $this->assertFalse(config('offer-documents.output.digital_delivery'));
+        $this->assertSame('physical_print', config('offer-documents.output.workflow'));
+    }
+
+    public function test_renderer_refuses_a_configuration_that_enables_embedded_signatures(): void
+    {
+        config()->set('offer-documents.output.embedded_signature', true);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('hanya mendukung PDF tanpa tanda tangan/stempel digital');
+
+        app(OfferDocumentRenderer::class)->renderHtml($this->draftSnapshot());
+    }
+
+    public function test_signer_model_exposes_identity_but_not_signature_or_stamp_assets(): void
+    {
+        $signer = new DocumentSignerVersion;
+
+        foreach (['signature_path', 'signature_sha256', 'signature_mime', 'stamp_path', 'stamp_sha256', 'stamp_mime'] as $attribute) {
+            $this->assertFalse($signer->isFillable($attribute));
+            $this->assertContains($attribute, $signer->getHidden());
+        }
+
+        foreach (['full_name', 'position', 'permit_no', 'registration_no'] as $attribute) {
+            $this->assertTrue($signer->isFillable($attribute));
+        }
     }
 
     public function test_it_rejects_a_snapshot_without_the_complete_ordered_clause_set(): void

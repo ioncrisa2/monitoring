@@ -39,9 +39,6 @@ class OfferDocumentController extends Controller
 
     /**
      * Download an authorized, non-persisted PDF draft.
-     *
-     * Final immutable artifacts will use their own download service when the
-     * review/finalization phase is implemented.
      */
     public function download(Offer $offer): Response
     {

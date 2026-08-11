@@ -123,8 +123,6 @@ class OfferSnapshotBuilder
                     'version_no' => $signer->version_no,
                     'status' => $signer->status,
                     'checksum' => $signer->checksum,
-                    'signature_sha256' => $signer->signature_sha256,
-                    'stamp_sha256' => $signer->stamp_sha256,
                 ] : null,
                 'renderer_profile' => [
                     'engine' => config('offer-documents.renderer.engine'),

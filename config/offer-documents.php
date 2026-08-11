@@ -1,9 +1,23 @@
 <?php
 
 return [
-    'disk' => 'offer_documents',
-
-    'storage_prefix' => 'offers',
+    /*
+    |--------------------------------------------------------------------------
+    | Output contract
+    |--------------------------------------------------------------------------
+    |
+    | The application only produces an unsigned PDF for physical printing.
+    | Signatures and stamps are applied with wet ink after the file is printed;
+    | delivery to the client happens outside the application.
+    |
+    */
+    'output' => [
+        'workflow' => 'physical_print',
+        'embedded_signature' => false,
+        'embedded_stamp' => false,
+        'signed_scan' => false,
+        'digital_delivery' => false,
+    ],
 
     'renderer' => [
         'engine' => 'dompdf',

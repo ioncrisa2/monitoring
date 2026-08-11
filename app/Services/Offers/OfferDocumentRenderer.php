@@ -8,11 +8,13 @@ use Dompdf\FontMetrics;
 use Dompdf\Options;
 use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
+use LogicException;
 
 class OfferDocumentRenderer
 {
     public function render(array $snapshot): string
     {
+        $this->assertPrintOnlyContract();
         $snapshot = $this->validatedSnapshot($snapshot);
         $dompdf = new Dompdf($this->options());
         $dompdf->setBasePath(resource_path('views/pdf/offers'));
@@ -32,7 +34,22 @@ class OfferDocumentRenderer
 
     public function renderHtml(array $snapshot): string
     {
+        $this->assertPrintOnlyContract();
+
         return $this->renderValidatedHtml($this->validatedSnapshot($snapshot));
+    }
+
+    private function assertPrintOnlyContract(): void
+    {
+        $output = (array) config('offer-documents.output', []);
+
+        if (($output['workflow'] ?? null) !== 'physical_print'
+            || ($output['embedded_signature'] ?? null) !== false
+            || ($output['embedded_stamp'] ?? null) !== false
+            || ($output['signed_scan'] ?? null) !== false
+            || ($output['digital_delivery'] ?? null) !== false) {
+            throw new LogicException('Renderer penawaran hanya mendukung PDF tanpa tanda tangan/stempel digital untuk proses cetak fisik.');
+        }
     }
 
     private function renderValidatedHtml(array $snapshot): string

@@ -135,6 +135,8 @@ class OfferDocumentAccessTest extends TestCase
             ->get(route('offers.documents.edit', $this->jakartaOffer))
             ->assertOk()
             ->assertSee('Dokumen Penawaran')
+            ->assertSee('PDF siap cetak tanpa tanda tangan/stempel digital')
+            ->assertSee('Output yang tersedia saat ini masih DRAF')
             ->assertSee('Penerima dan referensi')
             ->assertSee('Pihak dan objek penilaian')
             ->assertSee('Biaya, pajak, dan termin')
@@ -216,12 +218,16 @@ class OfferDocumentAccessTest extends TestCase
         $download = $this->actingAs($admin)
             ->get(route('offers.documents.download', $this->jakartaOffer));
 
-        $download->assertOk()->assertHeader('content-type', 'application/pdf');
+        $download->assertOk()
+            ->assertHeader('content-type', 'application/pdf')
+            ->assertHeader('cache-control', 'max-age=0, no-store, private')
+            ->assertHeader('x-content-type-options', 'nosniff');
         $this->assertStringStartsWith('%PDF-', $download->getContent());
         $this->assertStringStartsWith(
             'attachment; filename="penawaran-',
             (string) $download->headers->get('content-disposition'),
         );
+        $this->assertStringEndsWith('-draft.pdf"', (string) $download->headers->get('content-disposition'));
         $this->assertDatabaseHas('activity_logs', [
             'user_id' => $admin->id,
             'action' => 'PREVIEW_DRAFT',

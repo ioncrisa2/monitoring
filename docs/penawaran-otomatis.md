@@ -3,33 +3,55 @@
 ## Status Dokumen
 
 - Tanggal analisis: 12 Agustus 2026.
-- Status: vertical slice PDF draft telah diterapkan; finalisasi produksi tetap menunggu keputusan dan aset Fase 0.
+- Status: vertical slice PDF draft telah diterapkan; target produksi dipersempit menjadi PDF siap cetak tanpa tanda tangan/stempel digital.
 - Sumber: tiga PDF penawaran resmi yang diberikan sebagai acuan.
-- Cakupan: pembuatan, pratinjau, finalisasi, versioning, penyimpanan, dan pengunduhan dokumen penawaran PDF.
-- Prinsip: format visual dan urutan dokumen mengikuti contoh, sedangkan typo, kontradiksi, redaksi legal, tarif pajak, dan penggunaan tanda tangan harus disetujui pemilik proses sebelum masuk template produksi.
+- Cakupan: pengisian data, validasi, pratinjau DRAF, serta generate dan unduh PDF penawaran siap cetak.
+- Prinsip: format visual dan urutan dokumen mengikuti contoh, sedangkan typo, kontradiksi, redaksi legal, tarif pajak, dan identitas penandatangan harus disetujui pemilik proses sebelum masuk template produksi.
+
+### Keputusan scope final: cetak dan serah-terima fisik
+
+Sistem berhenti ketika PDF siap cetak berhasil dibuat dan diunduh. PDF tidak memuat gambar tanda tangan, gambar stempel, tanda tangan digital/PKI, atau bukti serah-terima digital. Nama, jabatan, dan nomor izin penandatangan boleh tercetak, tetapi area tanda tangan/stempel harus tetap kosong.
+
+Alur operasionalnya:
+
+```text
+Isi data penawaran
+        ↓
+Validasi dan pratinjau DRAF
+        ↓
+Generate/unduh PDF siap cetak tanpa watermark
+        ↓
+Cetak dokumen
+        ↓
+Tanda tangan dan stempel basah
+        ↓
+Serahkan dokumen fisik kepada client
+```
+
+Empat langkah terakhir setelah pengunduhan berlangsung di luar aplikasi. Outcome `DIKIRIM` tetap boleh dicatat manual pada Penawaran sebagai status bisnis, bukan sebagai bukti bahwa sistem mengirim file secara digital.
 
 ### Status implementasi per 12 Agustus 2026
 
 Sudah diterapkan dan dapat diuji:
 
-- Schema additive serta model untuk engagement, banyak pihak/aset/dokumen kepemilikan, fee, termin, requirement, template/profil/penandatangan terversi, nomor atomik, version, dan artifact. Field Penawaran lama tetap dipertahankan.
+- Schema additive serta model untuk engagement, banyak pihak/aset/dokumen kepemilikan, fee, termin, requirement, template/profil/identitas penandatangan, nomor atomik, version, dan artifact. Field Penawaran lama tetap dipertahankan; model version/artifact tidak diaktifkan pada scope cetak v1.
 - Nomor Penawaran dialokasikan server-side secara atomik, global per tahun. Nilai pada form hanya pratinjau; nomor, tanggal, dan cabang terkunci setelah alokasi. Nomor legacy yang valid dapat diadopsi ke ledger tanpa diubah.
 - Kalkulator fee/pajak integer Rupiah untuk mode `included`, `excluded`, dan `non_taxable`, pembulatan termin, serta terbilang Bahasa Indonesia.
 - Editor dokumen terpisah untuk penerima, referensi, lingkup, banyak pihak/aset, banyak dokumen per aset, fee, pajak, termin, persyaratan, asumsi, dan catatan internal.
 - Penyimpanan draft transactional, scope ID nested terhadap Offer/cabang, optimistic `lock_version`, batas jumlah/nilai input, snapshot deterministik, dan preflight mode draft/review/final.
-- Preview serta unduh PDF draft A4 melalui Dompdf dengan 25 klausul terurut, watermark `DRAF`, kop teks pada halaman ganjil, escaping output, throttle, audit log, dan policy cabang. Remote asset, PHP, JavaScript, signature image, serta stamp dinonaktifkan.
-- Disk privat dan schema version/artifact sudah disiapkan untuk fase arsip/finalisasi, tetapi endpoint saat ini masih merender draft non-persisten.
+- Preview serta unduh PDF draft A4 melalui Dompdf dengan 25 klausul terurut, watermark `DRAF`, kop teks pada halaman ganjil, escaping output, throttle, audit log, dan policy cabang. Remote asset, PHP, JavaScript, gambar tanda tangan, serta gambar stempel dinonaktifkan.
+- Renderer memakai kontrak workflow `physical_print`: blok penandatanganan hanya berisi identitas teks dan ruang kosong untuk tanda tangan/stempel basah.
 
 Keputusan kompatibilitas sementara:
 
 - Aplikasi existing sudah memberikan nomor saat Penawaran disimpan. Slice ini mempertahankan waktu alokasi tersebut, tetapi membuatnya atomik dan immutable. Target desain mengalokasikan nomor saat submit review; waktu final harus diputuskan pada Fase 0 agar draft terbengkalai tidak membakar nomor tanpa kebijakan void/gap.
 - Suffix seperti `.A` dapat diadopsi dari nomor legacy dan dapat diformat allocator, tetapi aturan membuat revisi pada base sequence yang sama belum diaktifkan sebelum arti suffix disetujui.
-- Template, identitas penerbit, dan kalimat legal fallback selalu ditandai provisional/DRAF. Tidak ada PDF final, signature, stamp, atau pengiriman otomatis pada slice ini.
+- Template, identitas penerbit, dan kalimat legal fallback selalu ditandai provisional/DRAF. PDF siap cetak tanpa watermark baru boleh diaktifkan setelah redaksi/template resmi lolos preflight.
 
 Belum boleh dianggap siap produksi final:
 
-- Redaksi legal 25 klausul, profile penerbit, letterhead/logo resolusi tinggi, font, penandatangan, signature/stamp, tarif pajak, aturan nomor/suffix/void, dan role finalizer belum disetujui.
-- Workflow submit review, approval hash, final artifact immutable, supersede, signed scan, recovery job, dan retensi arsip belum diaktifkan.
+- Redaksi legal 25 klausul, profile penerbit, letterhead/logo resolusi tinggi, font, identitas penandatangan, tarif pajak, aturan nomor/suffix/void, dan role pembuat PDF belum disetujui.
+- Tombol generate PDF siap cetak tanpa watermark belum diaktifkan agar dokumen provisional tidak keliru diserahkan kepada client.
 - Golden visual yang membuktikan fixture A/C tepat 5 halaman dan B tepat 13 halaman belum tersedia; renderer saat ini adalah spike draft aman, bukan baseline visual final.
 - Uji 20 request nomor paralel serta migration portability masih perlu dijalankan pada database produksi target (MySQL/PostgreSQL), bukan hanya SQLite test.
 
@@ -54,18 +76,10 @@ Validasi kelengkapan dan konsistensi
         ↓
 Pratinjau dokumen
         ↓
-Buat PDF draft
-        ↓
-Review dan persetujuan internal
-        ↓
-Finalisasi PDF yang tidak dapat berubah
-        ↓
-Unduh/kirim dan catat status penawaran
-        ↓
-Unggah kembali salinan yang telah disetujui klien
+Buat dan unduh PDF siap cetak
 ```
 
-Target akhirnya adalah pengguna tidak lagi menyusun surat di Word secara manual. Data hanya dimasukkan satu kali, kemudian sistem menghasilkan dokumen penawaran dengan format KJPP yang konsisten, dapat diaudit, dan tetap sama ketika diunduh kembali di kemudian hari.
+Target akhirnya adalah pengguna tidak lagi menyusun surat di Word secara manual. Data hanya dimasukkan satu kali, kemudian sistem menghasilkan dokumen penawaran dengan format KJPP yang konsisten. Pencetakan, tanda tangan/stempel basah, dan serah-terima fisik dilakukan di luar aplikasi.
 
 ## 2. Sumber Acuan yang Dianalisis
 
@@ -273,11 +287,11 @@ Ketentuan layout:
 
 ### 5.6 Tanda tangan
 
-- PDF draft tidak memakai tanda tangan/stempel atau menggunakan placeholder yang jelas.
-- Gambar tanda tangan KJPP hanya boleh ditempelkan oleh pengguna dengan permission khusus.
-- Final dengan signature image bukan tanda tangan digital kriptografis.
-- Salinan yang ditandatangani basah oleh klien disimpan sebagai jenis dokumen terpisah.
-- Aset signature/stamp tidak boleh berada pada public disk atau URL publik.
+- PDF tidak pernah memuat gambar tanda tangan atau gambar stempel.
+- PDF tidak menggunakan tanda tangan digital kriptografis/PKI.
+- Nama, jabatan, nomor izin, dan registrasi penandatangan boleh dicetak sebagai teks.
+- Blok akhir menyediakan ruang kosong untuk tanda tangan dan stempel basah setelah dokumen dicetak.
+- Fitur Penawaran Otomatis tidak menyediakan unggahan scan dokumen yang sudah ditandatangani. Arsip dokumen WorkOrder existing berada di luar keputusan scope ini.
 
 ## 6. Audit Fitur Penawaran Saat Ini
 
@@ -309,8 +323,8 @@ Kemampuan yang belum tersedia:
 - Status termasuk/belum termasuk pajak dan komponen biaya lain.
 - Termin pembayaran repeatable.
 - Checklist permintaan data awal.
-- Pratinjau, finalisasi, revisioning, hash, dan arsip PDF.
-- Permission granular untuk review, finalisasi, signature, dan download.
+- Pratinjau DRAF dan generate PDF siap cetak tanpa watermark.
+- Permission untuk melihat, mengelola data, dan membuat PDF.
 - Relasi dokumen langsung ke Offer; tabel `documents` saat ini hanya menerima `work_order_id` atau `report_id`.
 
 ### 6.1 Gap nomor surat
@@ -338,8 +352,8 @@ Baseline yang direkomendasikan:
 - Offer hanya menyimpan `current_number_allocation_id`; `offer_no`, `sequence_no`, dan `sequence_year` dapat dipertahankan sebagai denormalized compatibility fields yang disinkronkan service, bukan sumber riwayat.
 - Alokasi dilakukan dengan row lock/transaction ketika penawaran pertama kali diajukan ke review, bukan saat user baru membuka form draft.
 - Sebelum alokasi, UI hanya menampilkan preview nomor yang jelas berstatus belum resmi.
-- Sebelum finalisasi, perubahan tahun/cabang/suffix tidak mengedit allocation. Sistem melakukan void terhadap allocation lama lalu membuat allocation baru dengan alasan audit dan memindahkan pointer aktif.
-- Setelah dokumen `finalized`/`sent` atau Offer sudah dikonversi menjadi WorkOrder, nomor terkunci dan tidak dapat di-void/dialokasikan ulang. Revisi mempertahankan nomor yang sama kecuali kebijakan suffix resmi kelak menyatakan lain.
+- Setelah nomor dialokasikan, perubahan tahun/cabang/suffix tidak mengedit allocation secara langsung. Koreksi harus mengikuti kebijakan void/gap resmi.
+- Setelah PDF siap cetak dibuat atau Offer sudah dikonversi menjadi WorkOrder, nomor tetap terkunci. Revisi mempertahankan nomor yang sama kecuali kebijakan suffix resmi kelak menyatakan lain.
 - Gap nomor dipertahankan sebagai record void; nomor tidak didaur ulang.
 - Suffix seperti `.A` diperlakukan sebagai komponen eksplisit, bukan otomatis dianggap nomor revisi, sampai owner menetapkan aturannya.
 
@@ -389,7 +403,7 @@ Baseline v1 untuk IDR:
 - Termin dihitung dari `document_payable_total`; termin terakhir menerima residual pembulatan agar total nominal tepat sama.
 - Terbilang dibuat dari nilai yang benar-benar dicetak sebagai total penawaran.
 
-`line_total`, tax base, pajak, nominal termin, total, dan terbilang adalah field turunan. Nilai tersebut tidak menjadi mass-assignable input dan selalu dihitung ulang server-side sebelum snapshot/finalisasi. Bila owner membutuhkan pecahan Rupiah atau mata uang lain, precision/currency minor-unit rule harus ditambahkan sebelum scope diperluas.
+`line_total`, tax base, pajak, nominal termin, total, dan terbilang adalah field turunan. Nilai tersebut tidak menjadi mass-assignable input dan selalu dihitung ulang server-side sebelum snapshot/render. Bila owner membutuhkan pecahan Rupiah atau mata uang lain, precision/currency minor-unit rule harus ditambahkan sebelum scope diperluas.
 
 ## 7. Arsitektur Domain yang Disarankan
 
@@ -402,12 +416,12 @@ Offer
 ├── OfferFeeItem[]              fee ringkas atau per aset
 ├── OfferPaymentTerm[]          termin pembayaran
 ├── OfferRequirement[]          daftar data awal
-└── OfferDocumentVersion[]      immutable snapshot + approval
-    ├── OfferDocumentArtifact[] draft/final/signed scan
-    ├── OfferTemplateVersion
-    ├── IssuerProfileVersion
-    └── DocumentSignerVersion
+├── OfferTemplateVersion        redaksi dan aturan layout
+├── IssuerProfileVersion        identitas/letterhead penerbit
+└── DocumentSignerVersion       identitas teks penandatangan
 ```
+
+Tabel version/artifact yang sudah terlanjur tersedia pada fondasi awal tidak dipakai oleh runtime scope cetak v1. PDF dirender on-demand dan langsung dikirim sebagai response unduhan; tidak ada signed scan atau file tanda tangan/stempel.
 
 ### 7.1 `offer_engagements`
 
@@ -417,8 +431,8 @@ Relasi one-to-one dengan `offers`. Field minimal:
 |---|---|
 | `offer_id` | Relasi unik ke penawaran. |
 | `workflow_state` | Lifecycle dokumen aktif, terpisah dari outcome komersial. |
-| `current_review_version_id` | Versi immutable yang sedang direview. |
-| `current_final_version_id` | Versi final aktif; versi lama tetap aktif selama revisi belum final. |
+| `current_review_version_id` | Reserved dari fondasi awal; tidak dipakai pada scope cetak v1. |
+| `current_final_version_id` | Reserved dari fondasi awal; tidak dipakai pada scope cetak v1. |
 | `state_changed_by` / `state_changed_at` | Actor dan waktu transisi terakhir. |
 | `lock_version` | Optimistic lock untuk mencegah dua aksi workflow saling menimpa. |
 | `template_version_id` | Versi template legal yang dipilih. |
@@ -512,7 +526,7 @@ Mendukung fee tunggal maupun tabel fee per aset:
 - `unit_amount`.
 - `sort_order`.
 
-`line_total`, total, pajak, dan terbilang dihitung server-side dari fee item, bukan disimpan sebagai input atau dipercaya dari public Livewire property. Nilai hasil hitung hanya masuk immutable snapshot/artifact metadata.
+`line_total`, total, pajak, dan terbilang dihitung server-side dari fee item, bukan disimpan sebagai input atau dipercaya dari public Livewire property. Nilai hasil hitung hanya masuk snapshot render.
 
 `offer_subject_id`/`offer_asset_id` harus berasal dari Offer yang sama. Service snapshot memvalidasi ownership lintas relasi; database/service juga menjamin `sort_order` unik dalam parent. Jika implementasi dapat menurunkan Offer melalui relasi aset, FK `offer_id` yang redundan sebaiknya dihilangkan untuk mengurangi peluang mismatch.
 
@@ -561,15 +575,11 @@ Gunakan dua entitas terversi:
 - jabatan;
 - nomor izin dan registrasi;
 - kontak;
-- private path signature/stamp;
-- hash dan immutable asset version;
 - periode efektif;
 - status aktif;
 - approver.
 
-Perubahan profil tidak boleh mengubah PDF final yang pernah diterbitkan.
-
-Letterhead/signature/stamp disimpan content-addressed berdasarkan SHA-256. Upload baru selalu membuat asset version baru; file yang sudah direferensikan version/snapshot tidak boleh ditimpa atau dihapus. Finalizer menyalin bytes aset yang disetujui ke render bundle sementara dan menyimpan hash setiap aset dalam snapshot sehingga approval tetap dapat direproduksi walaupun profil aktif berubah.
+Model tersebut hanya menyimpan identitas teks penandatangan. Kolom aset signature/stamp yang terlanjur dibuat pada migration fondasi tidak mass-assignable, tidak masuk snapshot, tidak memiliki UI upload, dan tidak boleh dibaca oleh renderer.
 
 ### 7.8 Template dan versi legal
 
@@ -606,57 +616,20 @@ Kontrak condition engine v1:
 - `schema_version`, resolver version, condition input, dan hasil clause list masuk snapshot/hash.
 - Approval template menjalankan fixture test untuk seluruh branch kondisi yang didukung.
 
-### 7.9 Versi konten dan artifact file
+### 7.9 Output PDF on-demand
 
-Tabel khusus lebih aman daripada memaksakan tabel `documents` existing. Pisahkan versi konten yang direview dari file hasil render agar approval selalu terikat ke snapshot yang tepat dan satu versi dapat memiliki beberapa draft/signed scan.
+Scope cetak v1 tidak menyimpan artifact file dan tidak mengelola signed scan. Controller membangun snapshot dari data Offer terbaru, menjalankan preflight, merender PDF, mencatat aktivitas generate/download, lalu mengirim bytes langsung kepada browser.
 
-`offer_document_versions` menyimpan:
+Terdapat dua mode output:
 
-- `offer_id` dan `version_no`.
-- `version_state`: `in_review`, `approved`, `finalized`, `superseded`, atau `void`.
-- `template_version_id`, `issuer_profile_version_id`, dan `signer_version_id`.
-- `data_snapshot` JSON dan `snapshot_sha256`.
-- `approved_snapshot_sha256`.
-- `approved_draft_artifact_id` dan `approved_render_profile_hash`.
-- `submitted_by`, `submitted_at`.
-- `approved_by`, `approved_at`.
-- `finalized_by`, `finalized_at`.
-- `supersedes_id` nullable.
-- `lock_version`.
+- `preview`: selalu memakai watermark `DRAF` dan tidak boleh diserahkan kepada client;
+- `print_ready`: tanpa watermark, hanya dapat dibuat setelah template, profil penerbit, identitas penandatangan, dan seluruh data wajib lolos preflight ketat.
 
-Unique constraint:
+Kedua mode tidak boleh memuat gambar tanda tangan/stempel, form signature PDF, JavaScript, PHP, remote asset, atau URL yang berasal dari input pengguna. Filename dibentuk server-side dari nomor Penawaran yang telah disanitasi.
 
-```text
-(offer_id, version_no)
-```
+## 8. Snapshot Render Deterministik
 
-`offer_document_artifacts` menyimpan file:
-
-- `offer_document_version_id`.
-- `artifact_type`: `draft`, `final`, atau `signed_scan`.
-- `artifact_no` agar beberapa draft/signed scan dapat disimpan pada versi yang sama.
-- `final_slot` nullable; bernilai `1` hanya untuk artifact final.
-- `storage_status`: `pending`, `ready`, `failed`, atau `void`.
-- `generation_key` unik untuk idempotency.
-- `source_draft_artifact_id` nullable untuk trace final ke draft approved.
-- `file_path` private, `original_filename`, `mime_type`, dan `file_size`.
-- `sha256`, `renderer_version`, `generated_by`, dan `generated_at`.
-
-Unique constraint dasar:
-
-```text
-(offer_document_version_id, artifact_type, artifact_no)
-```
-
-Tambahkan unique `(offer_document_version_id, final_slot)` serta check bahwa `final_slot = 1` hanya untuk `artifact_type = final`. Karena artifact lain memakai null, database mengizinkan banyak draft/signed scan tetapi maksimal satu row final per version. Retry finalisasi memperbarui row final yang sama. `current_final_version_id` pada engagement adalah satu-satunya penunjuk final aktif antarversion.
-
-`version_no` dialokasikan monotonik di bawah row lock Offer dan tidak pernah digunakan ulang. `artifact_no` dialokasikan di bawah lock version. Request paralel/retry harus memakai `generation_key` sehingga tidak dapat membuat dua final untuk snapshot yang sama.
-
-Approval selalu diberikan pada `offer_document_versions.snapshot_sha256`, render profile, dan draft artifact tertentu. Finalizer wajib memverifikasi seluruh hash tersebut, lalu merender final dari snapshot approved yang sama. Perubahan data, template, issuer, signer/signature asset, renderer profile, atau input lain membatalkan approval dan memerlukan version/review baru. Transformasi final yang diizinkan hanya menghilangkan watermark draft dan menambahkan signature yang hash-nya sudah tercakup dalam snapshot approved.
-
-## 8. Snapshot dan Immutability
-
-Snapshot immutable dibuat ketika transition `ready_for_review → in_review`, sebelum draft review dirender. Snapshot tersebut menjadi satu-satunya source of truth untuk approval dan finalisasi. Sistem menyimpan:
+Snapshot dibangun setiap kali pengguna meminta preview atau PDF siap cetak. Snapshot menjadi satu-satunya input renderer pada request tersebut dan memuat:
 
 - nomor dan tanggal surat;
 - seluruh identitas pihak;
@@ -667,24 +640,21 @@ Snapshot immutable dibuat ketika transition `ready_for_review → in_review`, se
 - versi template;
 - profil penerbit;
 - profil penandatangan;
-- nama/path aset yang dipakai;
+- identitas aset letterhead/logo yang dipakai;
 - versi renderer;
-- waktu dan user penerbit.
+- mode output dan user pembuat PDF.
 
 Aturan:
 
-- Draft review, approval, dan final selalu merujuk `offer_document_version` serta `snapshot_sha256` yang sama.
-- Perubahan data setelah submit review membatalkan review aktif, mengembalikan workflow ke `data_draft`, dan membutuhkan version/snapshot baru.
-- Finalisasi tidak membaca ulang Offer/Organization/Debtor live; finalizer hanya memverifikasi lalu memakai snapshot approved.
-- PDF final lama selalu diunduh dari file yang tersimpan, bukan di-render ulang dari database terkini.
-- Edit setelah finalisasi membuat revision/version baru tanpa mengubah final aktif lama.
-- Final lama baru berubah menjadi `superseded` secara atomik setelah artifact final revisi berstatus `ready` dan pointer `current_final_version_id` berhasil dipindahkan.
-- Hash SHA-256 diverifikasi ketika file disimpan dan saat audit bila diperlukan.
-- Perubahan template, organisasi, tarif pajak, atau signatory tidak boleh mengubah dokumen lama.
+- Renderer hanya menerima snapshot tervalidasi dan tidak melakukan query bebas.
+- Preview dan print-ready dari data/template yang sama harus memiliki isi yang sama kecuali watermark/label DRAF.
+- Perubahan Offer, organisasi, template, tarif, atau identitas penandatangan memengaruhi generate berikutnya karena scope v1 tidak menyimpan artifact lama.
+- Pengguna bertanggung jawab menyimpan file yang sudah dicetak/diserahkan sesuai prosedur arsip kantor di luar aplikasi.
+- Internal note tidak pernah masuk snapshot PDF.
 
 ## 9. Aturan Bisnis dan Preflight
 
-Finalisasi ditolak jika salah satu kondisi berikut gagal:
+Generate PDF siap cetak ditolak jika salah satu kondisi berikut gagal:
 
 ### Identitas
 
@@ -718,11 +688,11 @@ Finalisasi ditolak jika salah satu kondisi berikut gagal:
 - Konten melampaui batas layout tanpa review.
 - Blok tanda tangan tidak muat pada halaman akhir.
 
-Preflight menghasilkan daftar error dan warning. Error memblokir finalisasi; warning masih dapat dilanjutkan oleh reviewer dengan alasan yang tersimpan di audit log.
+Preflight menghasilkan daftar error dan warning. Error memblokir generate PDF siap cetak; preview DRAF tetap dapat menampilkan warning untuk dilengkapi pengguna.
 
 ## 10. State Machine
 
-Outcome komersial dan lifecycle dokumen harus dipisahkan.
+Outcome komersial tetap terpisah dari status kelengkapan data PDF.
 
 ### 10.1 Nilai outcome penawaran existing
 
@@ -735,28 +705,16 @@ DRAFT → DIKIRIM → DITERIMA
 
 Diagram tersebut menggambarkan alur yang diharapkan, tetapi code existing belum menegakkan transition guard; pengguna edit dapat memilih outcome yang diizinkan validation secara langsung. Fase domain harus menetapkan transition matrix atau secara eksplisit mempertahankan outcome sebagai label bebas. Lifecycle dokumen di bawah tidak boleh bergantung pada asumsi transition yang belum ditegakkan.
 
-### 10.2 Lifecycle dokumen baru
+### 10.2 Status kesiapan PDF
 
-| State | Arti | Aksi berikutnya |
-|---|---|---|
-| `data_draft` | Data surat masih diedit. | Validasi/preflight. |
-| `ready_for_review` | Seluruh error preflight selesai. | Buat draft/review. |
-| `in_review` | Draft sedang diperiksa. | Revisi atau approve. |
-| `approved` | Konten disetujui reviewer. | Finalisasi. |
-| `finalized` | PDF final immutable tersedia. | Unduh/kirim. |
-| `sent` | Pengiriman dicatat. | Terima/tolak/unggah scan. |
-| `void` | Dibatalkan dengan alasan. | Hanya arsip. |
-
-`offer_engagements.workflow_state` adalah satu-satunya owner state aktif. `offer_document_versions.version_state` hanya menjelaskan status versi immutable yang direview/final. Setiap transition menggunakan compare-and-swap terhadap `lock_version`, menyimpan actor, timestamp, alasan bila relevan, dan activity log. Transition yang tidak tercantum ditolak server-side.
+Scope cetak v1 tidak menambahkan state machine dokumen. Kesiapan output ditentukan langsung oleh preflight:
 
 ```text
-data_draft → ready_for_review → in_review → approved → finalized → sent
-                 ↘ data_draft ←────┘          ↘ data_draft (data berubah)
-non-final state → void (dengan alasan dan permission)
-finalized/sent → data_draft (mulai revisi; final lama tetap aktif)
+data belum lengkap → simpan draft / preview ber-watermark
+data + template resmi lengkap → generate PDF siap cetak
 ```
 
-Ketika revisi dibuat, workflow aktif kembali ke `data_draft`, tetapi final lama tetap aktif. Final lama baru menjadi `superseded` saat final revisi berhasil diterbitkan; semua versi tetap dapat dilihat di riwayat. `signed_scan` adalah jenis file turunan dan tidak menggantikan PDF final asli.
+`offer_engagements.workflow_state` dan tabel version/artifact yang sudah ada tetap dormant dan tidak menjadi syarat alur pengguna. Status `DIKIRIM`, `DITERIMA`, `DITOLAK`, atau `TIDAK_LANJUT` tetap dikelola melalui outcome Penawaran existing setelah proses fisik berlangsung.
 
 ## 11. Rancangan UI
 
@@ -803,21 +761,16 @@ Pada mobile, panel ditumpuk. Review menampilkan:
 - subtotal/pajak/total;
 - jumlah pihak/aset;
 - jumlah halaman hasil render;
-- perbandingan terhadap versi sebelumnya.
+- indikator bahwa output tidak memuat tanda tangan/stempel digital.
 
 ### 11.4 Action pada daftar Penawaran
 
 - Lengkapi dokumen.
 - Pratinjau.
-- Buat PDF draft.
-- Ajukan review.
-- Finalisasi, bila berizin.
-- Unduh versi final.
-- Buat revisi.
-- Unggah salinan ditandatangani.
-- Lihat riwayat versi.
+- Unduh PDF DRAF.
+- Generate PDF siap cetak, bila preflight ketat lulus.
 
-Satu baris tabel tidak boleh menampilkan semua action sekaligus. Gunakan satu action utama berdasarkan state dan menu sekunder untuk riwayat/unduhan.
+Satu baris tabel tidak boleh menampilkan semua action sekaligus. Gunakan satu action utama untuk melengkapi dokumen dan menu sekunder untuk preview/unduhan.
 
 ## 12. Service Layer
 
@@ -830,11 +783,10 @@ Service yang disarankan:
 - `OfferSnapshotBuilder` — membangun snapshot deterministik.
 - `OfferClauseResolver` — menerapkan kondisi 25 klausul.
 - `OfferDocumentRenderer` — mengubah print view menjadi PDF.
-- `OfferDocumentFinalizer` — transaction, penyimpanan atomik, hash, dan audit.
-- `OfferDocumentDownloadService` — authorization dan response file private.
+- `OfferDocumentController` — authorization, mode preview/siap-cetak, response binary, dan audit.
 - `OfferToWorkOrderConverter` — menyalin subject/aset secara transaction-safe saat penawaran diterima.
 
-Kalkulasi dan finalisasi tidak ditempatkan langsung di method Livewire agar dapat diuji tanpa browser dan dipakai kembali oleh queue/command.
+Kalkulasi dan render PDF tidak ditempatkan langsung di method Livewire agar dapat diuji tanpa browser dan dipakai kembali oleh controller/command.
 
 ## 13. Pilihan Mesin PDF
 
@@ -865,7 +817,7 @@ Decision gate sebelum implementasi penuh:
 1. Render halaman pembuka.
 2. Render klausul objek massal.
 3. Render tabel diskon dan fee panjang.
-4. Render halaman tanda tangan.
+4. Render halaman dengan blok tanda tangan/stempel basah yang kosong.
 5. Bandingkan Dompdf dengan sumber pada ukuran A4.
 6. Lanjutkan Dompdf bila lolos; pindah ke Browsershot bila gagal.
 
@@ -898,7 +850,7 @@ resources/views/pdf/offers/
 
 Aturan:
 
-- View hanya menerima immutable snapshot, bukan query model secara bebas.
+- View hanya menerima snapshot tervalidasi, bukan query model secara bebas.
 - Setiap partial bersifat presentational.
 - Legal copy sudah selesai di-resolve sebelum view dipanggil.
 - Tidak ada request eksternal ketika render.
@@ -912,7 +864,6 @@ Route binary menggunakan controller agar authorization dan response header dapat
 ```text
 offers.documents.preview
 offers.documents.download
-offers.documents.signed-copy.download
 ```
 
 Livewire menangani editor dan command UI, sedangkan service menangani domain operation.
@@ -922,16 +873,11 @@ Permission baru yang disarankan:
 - `offers.documents.view`.
 - `offers.documents.manage`.
 - `offers.documents.generate-draft`.
-- `offers.documents.review`.
-- `offers.documents.finalize`.
-- `offers.documents.apply-signature`.
-- `offers.documents.download`.
-- `offers.documents.upload-signed-copy`.
 - `offers.templates.manage`.
 - `offers.issuer-profiles.manage`.
 - `offers.cross-branch`.
 
-Mapping role harus diputuskan eksplisit. Permission `menu.offers` tidak cukup untuk memberi hak menempelkan signature atau menerbitkan dokumen final.
+Mapping role harus diputuskan eksplisit. Permission `menu.offers` tidak cukup untuk membuat atau mengunduh PDF.
 
 ### 15.1 Policy dan branch scope
 
@@ -945,31 +891,24 @@ Baseline scope:
 | User dengan `offers.cross-branch` | Cabang yang diizinkan oleh policy. |
 | User lainnya | Hanya Offer dengan `branch_id` yang sama dengan user. |
 
-Reviewer/finalizer/signature permission tidak otomatis memberi akses lintas cabang. Signer/issuer profile juga harus cocok dengan cabang Offer kecuali override eksplisit yang diaudit.
+Permission generate tidak otomatis memberi akses lintas cabang. Profil penerbit dan identitas penandatangan juga harus cocok dengan cabang Offer kecuali override eksplisit yang diaudit.
 
-Test keamanan wajib mencoba ID milik cabang lain melalui URL preview/download, parameter Livewire edit/review/finalize, dan direct service call. Seluruhnya harus menghasilkan 403 tanpa membocorkan metadata atau keberadaan file.
+Test keamanan wajib mencoba ID milik cabang lain melalui URL preview/download, parameter Livewire edit, dan direct service call. Seluruhnya harus menghasilkan 403 tanpa membocorkan metadata.
 
 ## 16. Penyimpanan dan Keamanan
 
-- Simpan PDF pada disk private, bukan `public`.
-- Contoh path: `offers/{year}/{offer_id}/{uuid}.pdf`.
-- Nama unduhan yang aman: `penawaran-{nomor-aman}-{klien-aman}-v{version}.pdf`.
+- PDF dirender on-demand dan tidak disimpan oleh aplikasi pada scope cetak v1.
+- Nama unduhan yang aman: `penawaran-{nomor-aman}-{klien-aman}.pdf`.
 - Pengunduhan selalu melalui route yang melakukan policy check.
 - Jangan menerima path file dari public Livewire property.
-- Signature, stamp, dan letterhead harus lolos validasi MIME, ukuran, dimensi, dan image decode.
-- SVG tidak diterima untuk signature/stamp kecuali melalui sanitization yang ketat.
+- Letterhead/logo lokal harus lolos validasi MIME, ukuran, dimensi, dan image decode.
+- Gambar signature/stamp dan SVG dari input pengguna tidak diterima.
 - Remote image/font fetching dimatikan pada renderer.
-- File dirender ke temporary path dan di-hash sebelum transaction finalisasi.
-- Request generate/finalize memakai `generation_key` idempotent dan lock per Offer/version agar double-click atau retry tidak membuat versi/file ganda.
-- Record artifact dibuat dengan status `pending`; file lalu dipindahkan secara atomik ke final path dan status diubah menjadi `ready` dalam alur finalisasi terkoordinasi.
-- Karena database dan filesystem tidak berbagi transaction, kegagalan setelah salah satu sisi berhasil menjalankan compensating cleanup/retry. Scheduled reconciler mengubah pending yang gagal menjadi `failed` dan membersihkan file orphan secara aman.
-- Kegagalan render tidak boleh menghasilkan artifact yang dapat diunduh sebagai final.
-- Signed scan divalidasi melalui magic bytes dan parser PDF, bukan extension/MIME dari browser saja; tetapkan batas ukuran, jumlah halaman, dan quarantine/antivirus bila tersedia pada environment produksi.
-- Immutable asset dan PDF final masuk kebijakan backup, restore test, encryption at rest bila didukung storage, serta retention/legal hold yang disetujui.
-- Download dan finalisasi dicatat pada audit log.
+- Kegagalan render harus mengembalikan error tanpa response file parsial.
+- Preview dan download dicatat pada audit log.
 - Data sensitif tidak ditulis ke log exception.
 - Preview draft memiliki watermark `DRAFT — BELUM DISETUJUI`.
-- Finalisasi dan penggunaan signature memerlukan re-authorization sesuai tingkat risiko yang disepakati.
+- Output siap cetak tidak memiliki watermark dan tetap tidak memuat signature/stamp digital.
 
 ## 17. Integrasi dengan Konversi Pekerjaan
 
@@ -982,7 +921,7 @@ Saat penawaran diterima dan dikonversi:
 - seluruh `offer_assets` disalin ke `work_order_assets`;
 - field kepemilikan/luas yang belum ada pada `work_order_assets` perlu ditambahkan atau dipetakan secara eksplisit;
 - perilaku existing secara eksplisit memakai `offer_no` sebagai `contract_no` dan menyebutnya locked decision; rencana awal mempertahankan perilaku tersebut. Jika owner ingin nomor kontrak berbeda, keputusan dan migrasinya harus dibuat sebelum fase integrasi;
-- PDF final penawaran dapat direferensikan oleh WorkOrder tanpa diduplikasi secara fisik;
+- Snapshot data penawaran tetap dapat direferensikan oleh WorkOrder tanpa menyimpan ulang PDF;
 - status history dan audit log dibuat satu kali;
 - retry tidak boleh membuat WorkOrder atau history ganda.
 
@@ -1000,25 +939,18 @@ Saat penawaran diterima dan dikonversi:
 - Validator duplicate certificate.
 - Resolver klausul berdasarkan purpose/basis.
 - Snapshot deterministik.
-- Hash file.
-- State transition legal/ilegal.
+- Kontrak output workflow `physical_print`.
 
 ### 18.2 Feature test
 
 - Create/Edit tetap kompatibel dengan data Penawaran lama.
 - Banyak subject dan aset dapat disimpan serta diurutkan.
 - Preflight menampilkan error yang benar.
-- Pengguna tanpa permission tidak dapat preview/finalize/download.
+- Pengguna tanpa permission tidak dapat preview/download.
 - Draft memiliki watermark.
-- Final tersimpan private dan dapat diunduh user berizin.
-- Edit setelah final membuat versi baru.
-- Final lama tidak berubah setelah master/template diedit.
-- Approval hanya berlaku untuk snapshot hash dan draft artifact yang direview.
-- Finalizer menolak snapshot hash yang berbeda dari approval.
-- Final lama tetap aktif selama revisi masih draft dan baru superseded setelah final baru ready.
-- Signature tidak dapat digunakan tanpa permission.
-- Signed scan tersimpan sebagai dokumen terpisah.
-- Banyak signed scan pada version yang sama tidak melanggar constraint.
+- PDF siap cetak tidak memiliki watermark.
+- Extra key/path/data URI signature atau stamp tidak pernah masuk HTML/PDF.
+- PDF tidak memiliki object digital signature, `ByteRange`, atau `AcroForm`.
 - Konversi menyalin semua aset tepat satu kali.
 - Semua action penting menghasilkan audit log.
 
@@ -1029,8 +961,8 @@ Saat penawaran diterima dan dikonversi:
 - Media box A4 pada seluruh halaman.
 - Teks wajib dari 25 klausul tersedia.
 - Jumlah dan total fee sesuai snapshot.
-- Draft/final menampilkan atau menghilangkan watermark sesuai state.
-- Hash database sama dengan file.
+- Preview/siap-cetak menampilkan atau menghilangkan watermark sesuai mode.
+- Blok penandatanganan memiliki ruang kosong untuk tinta/stempel basah.
 
 ### 18.4 Golden/visual test
 
@@ -1050,7 +982,7 @@ Manual UAT wajib memeriksa:
 - odd/even letterhead;
 - font dan wrapping;
 - tabel panjang;
-- signature alignment;
+- alignment blok penandatanganan basah;
 - pembukaan di Chrome, Edge, dan Adobe Reader.
 
 ## 19. Tahapan Penerapan
@@ -1064,8 +996,8 @@ Manual UAT wajib memeriksa:
 - Tetapkan pola nomor dan arti setiap segmen.
 - Tetapkan scope/waktu alokasi nomor, aturan suffix, dan perlakuan void/gap.
 - Selesaikan clause ledger serta fixture tersanitasi A/B/C.
-- Siapkan letterhead, font, signature, dan stamp resmi.
-- Tentukan role reviewer/finalizer.
+- Siapkan letterhead/logo dan font resmi.
+- Tetapkan identitas penandatangan serta role yang boleh membuat PDF siap cetak.
 - Setujui branch-scope policy dan target visual/performance baseline.
 
 Gate: tidak ada template produksi sebelum owner legal/operasional menyetujui sumber teks dan aset.
@@ -1076,7 +1008,7 @@ Gate: tidak ada template produksi sebelum owner legal/operasional menyetujui sum
 - Tambah allocator nomor atomik.
 - Tambah calculator dan terbilang.
 - Tambah snapshot builder dan preflight validator.
-- Tambah state owner, version/artifact model, lock, dan approval hash contract.
+- Tambah lock draft, snapshot builder, dan kontrak preflight.
 - Pertahankan workflow Penawaran existing.
 
 Gate: unit test domain dan compatibility test lulus.
@@ -1084,13 +1016,12 @@ Gate: unit test domain dan compatibility test lulus.
 ### Fase 2 — Master template dan profil
 
 - UI profil penerbit/cabang.
-- UI penandatangan.
+- UI identitas penandatangan tanpa upload signature/stamp.
 - Template dan version approval.
-- Private asset management.
-- Content-addressed immutable asset version.
+- Pengelolaan aset letterhead/logo lokal.
 - Permission baru.
 
-Gate: hanya versi approved yang dapat dipakai finalisasi.
+Gate: hanya template, profil penerbit, dan identitas penandatangan approved yang dapat dipakai untuk PDF siap cetak.
 
 ### Fase 3 — Editor dokumen penawaran
 
@@ -1112,24 +1043,22 @@ Gate: tiga fixture sumber dapat direpresentasikan tanpa field bebas yang berlebi
 
 Gate: visual sign-off pada fixture simple dan bulk.
 
-### Fase 5 — Review, finalisasi, dan arsip
+### Fase 5 — PDF siap cetak
 
-- State machine.
-- Approval/finalization policy.
-- Immutable snapshot.
-- Private storage dan download.
-- Version history dan supersede.
-- Signature permission serta signed scan.
-- Audit log.
+- Preflight ketat untuk template/profil/data resmi.
+- Mode render tanpa watermark.
+- Download on-demand tanpa penyimpanan artifact.
+- Blok tanda tangan/stempel basah tetap kosong.
+- Policy generate/download dan audit log.
 
-Gate: security test, versioning test, dan recovery test lulus.
+Gate: security test, kontrak tanpa signature/stamp digital, dan hasil cetak fisik lulus UAT.
 
 ### Fase 6 — Integrasi WorkOrder
 
 - Transactional conversion.
 - Salin seluruh aset.
 - Idempotency.
-- Referensi PDF final.
+- Referensi data Offer/snapshot; file PDF tidak perlu diduplikasi.
 - Regression test workflow lama.
 
 Gate: satu Offer menghasilkan maksimal satu WorkOrder dan satu initial history.
@@ -1164,10 +1093,10 @@ Fitur dianggap siap produksi jika:
 5. Deskripsi objek dan tabel fee selalu berasal dari record yang sama.
 6. Nomor urut aset, SLA, total, pajak, dan terbilang konsisten otomatis.
 7. Draft jelas berbeda dari final.
-8. PDF final immutable, terversi, memiliki hash, dan dapat diunduh kembali.
-9. Perubahan master/template tidak mengubah PDF final lama.
-10. Pengguna tanpa permission tidak dapat finalisasi, memakai signature, atau mengunduh dokumen.
-11. Seluruh generate, review, finalisasi, supersede, upload signed scan, dan download tercatat.
+8. PDF siap cetak dapat diunduh oleh pengguna berizin dan tidak memuat watermark.
+9. PDF tidak memuat gambar signature/stamp maupun object tanda tangan digital.
+10. Pengguna tanpa permission tidak dapat membuat atau mengunduh PDF.
+11. Seluruh preview, generate, dan download tercatat.
 12. Konversi Offer ke WorkOrder bersifat transactional dan idempotent.
 13. Test unit, feature, PDF contract, visual regression, dan UAT lulus.
 14. Owner legal/operasional menyetujui redaksi dan hasil cetak.
@@ -1176,14 +1105,13 @@ Quality gate terukur setelah baseline Fase 0 disetujui:
 
 - Fixture source-equivalent A dan C masing-masing tepat 5 halaman; fixture B tepat 13 halaman. Fixture lain mengikuti expected page count yang disimpan bersama baseline.
 - Seluruh halaman memiliki media box A4 dengan toleransi maksimal 1 pt.
-- Tidak ada content bounding box keluar dari printable area dan tidak ada teks/tabel/signature yang terpotong.
+- Tidak ada content bounding box keluar dari printable area dan tidak ada teks/tabel/blok penandatanganan yang terpotong.
 - Text extraction menemukan seluruh `clause_key` 1–25 dan seluruh token wajib fixture.
 - Visual diff pada environment renderer yang dipin, 144 DPI, maksimal 1% pixel berbeda setelah masking field dinamis yang disetujui; threshold dapat diperketat pada sign-off.
 - Render simple selesai maksimal 3 detik dan bulk maksimal 10 detik, peak memory maksimal 256 MB, pada runner referensi yang dicatat di baseline.
-- PDF digital tanpa signed scan maksimal 5 MB; pengecualian harus menjadi warning preflight.
-- Dua puluh request nomor paralel menghasilkan 20 nomor unik; sepuluh retry finalisasi dengan idempotency key sama menghasilkan tepat satu final artifact.
+- PDF siap cetak maksimal 5 MB; pengecualian harus menjadi warning preflight.
+- Dua puluh request nomor paralel menghasilkan 20 nomor unik.
 - Seluruh percobaan IDOR lintas cabang pada URL, Livewire action, dan service menghasilkan 403/authorization exception.
-- Simulasi crash pada setiap tahap `pending → ready` dapat dipulihkan reconciler tanpa final palsu atau file orphan.
 - Bukti approval template/fixture menyimpan nama approver, tanggal, hash baseline, dan renderer version.
 
 ## 22. Keputusan yang Masih Dibutuhkan
@@ -1198,16 +1126,18 @@ Sebelum coding dimulai, pemilik proses perlu menjawab:
 6. Bagaimana kebijakan gap/void nomor serta suffix seperti `.A`; manual, nomor independen, atau revisi?
 7. Apakah fee pada UI adalah nilai sebelum pajak, sesudah pajak, atau dapat dipilih per penawaran?
 8. Apakah PPh hanya kalkulasi internal atau perlu muncul di dokumen?
-9. Siapa yang boleh approve, finalize, dan memakai signature/stamp?
+9. Siapa yang boleh menyetujui template/profil dan membuat PDF siap cetak?
 10. Role mana yang boleh mengakses penawaran lintas cabang?
-11. Apakah versi final awal menggunakan signature image atau selalu dicetak untuk tanda tangan basah?
-12. Apakah klien menerima PDF melalui aplikasi/email atau pengiriman tetap manual?
-13. Apakah template berbeda diperlukan per bank/tujuan, atau cukup satu template dengan kondisi?
-14. Berapa lama PDF, snapshot, signature asset, dan audit log harus disimpan?
+11. Apakah template berbeda diperlukan per bank/tujuan, atau cukup satu template dengan kondisi?
+12. Berapa lama data snapshot dan audit log harus disimpan?
 
 ## 23. Di Luar Scope Versi Pertama
 
 - Tanda tangan digital tersertifikasi/PKI.
+- Gambar tanda tangan/stempel pada PDF.
+- Upload atau arsip signed scan.
+- Penyimpanan/versioning artifact PDF oleh aplikasi.
+- Pengiriman PDF melalui email/aplikasi.
 - Pengiriman WhatsApp otomatis.
 - Portal persetujuan klien.
 - Editor bebas seperti Microsoft Word.
@@ -1215,9 +1145,9 @@ Sebelum coding dimulai, pemilik proses perlu menjawab:
 - Rekonstruksi seluruh PDF historis.
 - Perubahan substansi legal tanpa persetujuan pemilik proses.
 
-## 24. Rencana File Implementasi
+## 24. File Implementasi Scope Cetak
 
-Perkiraan file yang akan ditambah/diubah pada fase coding:
+File utama yang membentuk alur aktif:
 
 ```text
 composer.json
@@ -1237,23 +1167,20 @@ database/migrations/*_create_offer_templates_table.php
 database/migrations/*_create_offer_template_versions_table.php
 database/migrations/*_create_issuer_profile_versions_table.php
 database/migrations/*_create_document_signer_versions_table.php
-database/migrations/*_create_offer_document_versions_table.php
-database/migrations/*_create_offer_document_artifacts_table.php
 database/migrations/*_enforce_unique_offer_on_work_orders_table.php
 app/Models/*
-app/Policies/OfferDocumentPolicy.php
+app/Policies/OfferPolicy.php
 app/Services/Offers/*
 app/Livewire/Offers/DocumentEditor.php
 app/Http/Controllers/OfferDocumentController.php
 resources/views/livewire/offers/document-editor.blade.php
 resources/views/pdf/offers/*
 tests/Unit/Offers/*
-tests/Feature/OfferDocumentWorkflowTest.php
-tests/Feature/OfferDocumentAuthorizationTest.php
-tests/Feature/OfferDocumentPdfTest.php
+tests/Feature/OfferDocumentAccessTest.php
+tests/Feature/OfferDocumentRendererTest.php
 ```
 
-Daftar ini adalah rancangan, bukan instruksi untuk membuat semua file sekaligus. Implementasi tetap dilakukan per fase dan setiap fase harus lulus gate sebelum berlanjut.
+Tabel version/artifact dari fondasi awal tidak menjadi bagian alur runtime v1 dan tidak boleh dipakai untuk signed scan atau aset tanda tangan/stempel.
 
 ## 25. Langkah Pertama yang Direkomendasikan
 
@@ -1261,9 +1188,9 @@ Mulai dari Fase 0, kemudian buat vertical slice kecil:
 
 1. Satu template approved.
 2. Satu issuer profile.
-3. Satu signatory tanpa signature image terlebih dahulu.
+3. Satu identitas penandatangan teks tanpa fitur upload signature/stamp.
 4. Satu penawaran simple dengan satu subject/aset.
-5. Preview halaman pembuka, klausul biaya, dan tanda tangan.
+5. Preview halaman pembuka, klausul biaya, dan blok tanda tangan basah.
 6. Golden visual test.
 
 Setelah slice simple stabil, baru tambahkan nested subject/aset dan tabel fee untuk skenario BNI massal. Urutan ini mengurangi risiko mengembangkan editor besar sebelum kualitas PDF dasar terbukti.

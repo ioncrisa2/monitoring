@@ -8,6 +8,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DocumentSignerVersion extends Model
 {
+    protected $hidden = [
+        'signature_path',
+        'signature_sha256',
+        'signature_mime',
+        'stamp_path',
+        'stamp_sha256',
+        'stamp_mime',
+    ];
+
     protected $fillable = [
         'branch_id',
         'signer_key',
@@ -19,12 +28,6 @@ class DocumentSignerVersion extends Model
         'registration_no',
         'phone',
         'email',
-        'signature_path',
-        'signature_sha256',
-        'signature_mime',
-        'stamp_path',
-        'stamp_sha256',
-        'stamp_mime',
         'effective_from',
         'effective_until',
         'status',

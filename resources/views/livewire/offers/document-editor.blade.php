@@ -29,6 +29,10 @@
             </div>
         </header>
 
+        <div class="ui-surface-subtle border-l-4 border-brand-500 px-4 py-3 text-sm text-ink-secondary" role="note">
+            Cakupan fitur ini adalah PDF siap cetak tanpa tanda tangan/stempel digital. Output yang tersedia saat ini masih DRAF; PDF resmi akan diaktifkan setelah template dan profil penerbit disetujui. Setelah itu dokumen dicetak, ditandatangani dan distempel manual, lalu diserahkan kepada client.
+        </div>
+
         @if(session()->has('message'))
             <x-flash-message>{{ session('message') }}</x-flash-message>
         @endif
