@@ -1,5 +1,379 @@
 # Redesign UI Aplikasi — Enterprise, Ringkas, dan Konsisten
 
+## Status Implementasi — 12 Agustus 2026
+
+> **Status keseluruhan: implementasi visual utama selesai (estimasi ±92%).**
+>
+> Design foundation, shell aplikasi, workflow pekerjaan, Dashboard, Laporan Produksi, Penawaran, seluruh master data, hak akses, audit, impor, welcome, autentikasi, profil, dan halaman 403 sudah memakai sistem visual baru. Yang tersisa adalah verifikasi visual manual lintas viewport/browser, keputusan produk terkait account lifecycle, serta hardening behavior/security yang sengaja dipisahkan dari refactor visual. Implementasi sudah dipecah menjadi commit lokal berdasarkan fungsi dan **belum di-push**.
+
+### Ringkasan Progres
+
+| Area | Status | Progres | Keterangan |
+|---|---|---:|---|
+| Dashboard operasional | Selesai secara implementasi | 95% | KPI, ringkasan keuangan, pipeline, kesehatan SLA, alert, filter cabang, dan tabel perhatian sudah memakai foundation baru. Validasi visual manual masih diperlukan. |
+| Laporan produksi / analytics | Selesai secara implementasi | 90% | Grafik pendapatan, funnel konversi, cakupan filter, ekspor, serta tabel produksi sudah distandardisasi dan memiliki regresi data. |
+| Penawaran | Selesai secara implementasi | 95% | Halaman daftar, form buat/edit bersama, ringkasan keuangan, outcome badge, dan modal konversi sudah memakai pola baru serta dilindungi regression test. |
+| Design foundation | Selesai | 100% | Token light/dark, warna semantic, spacing, radius, shadow, typography, focus state, surface, form, button, badge, modal, dropdown, dan table baseline sudah tersedia. |
+| Komponen inti | Sebagian besar selesai | 95% | Button, input, select, textarea, modal, dropdown, navigation link, tabs, flash message, serta workflow/SLA/outcome/active badge sudah distandardisasi. |
+| Layout, sidebar, dan topbar | Selesai secara implementasi | 90% | Sidebar 240 px, topbar 60 px, page offset, context breadcrumb, mobile drawer, focus trap, dan account menu sudah distandardisasi. Audit visual lintas viewport masih diperlukan. |
+| Pekerjaan & detail pekerjaan | Sebagian besar selesai | 90% | Daftar, detail, workflow stepper, tabs, timeline, SLA, PIC, aset, laporan, dokumen, dan tujuh modal sudah memakai foundation baru. Pemeriksaan visual/manual dan follow-up behavior masih tersisa. |
+| Master data & hak akses | Selesai secara implementasi | 95% | Cabang, debitur, organisasi/klien, pengguna, peran, dan permission sudah memakai pola tabel, filter, status, action, dan modal yang konsisten. |
+| Audit aktivitas & impor data | Selesai secara implementasi | 90% | Filter dan tabel audit serta alur unggah, staging, preview, dan proses impor sudah memakai foundation baru. Hardening backend impor masih terpisah. |
+| Welcome, autentikasi, profil, dan 403 | Selesai secara implementasi | 90% | Shell tamu, identitas aplikasi, seluruh account state, profil, danger zone, dan fallback 403 sudah distandardisasi. Keputusan registration/verification/self-delete masih terbuka. |
+| Regresi otomatis | Selesai untuk cakupan redesign | 95% | Suite penuh lulus 86 test dan 604 assertion. Pemeriksaan browser visual, keyboard, dan screen reader tetap perlu dilakukan manual. |
+
+Persentase di atas adalah estimasi berdasarkan cakupan rencana pada dokumen ini, bukan hasil pengukuran otomatis.
+
+### Detail yang Sudah Dikerjakan
+
+#### 1. Dashboard operasional
+
+File terkait:
+
+- `app/Livewire/Dashboard.php`
+- `resources/views/livewire/dashboard.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Mengubah judul dari **Executive Dashboard Analytics & Monitoring** menjadi **Dashboard Operasional**.
+- Menyederhanakan alert overdue menjadi baris peringatan yang lebih ringkas, tanpa emoji, animasi, tombol solid, dan dekorasi berlebih.
+- Mempertahankan empat KPI operasional utama: pekerjaan aktif, SLA compliance, overdue SLA, dan selesai bulan ini.
+- Menghapus emoji dari kartu KPI agar tampil lebih profesional dan mudah dipindai.
+- Menggabungkan tiga metrik finansial menjadi satu financial summary yang lebih tenang: nilai penawaran aktif, WIP, dan nilai pekerjaan selesai.
+- Menghapus widget operasional sekunder yang membuat dashboard terlalu padat, termasuk antrean survey, review, dan cetak.
+- Memindahkan grafik tren pendapatan dan funnel konversi penawaran keluar dari dashboard utama.
+- Menghapus query dan state dashboard yang tidak lagi dipakai setelah pemindahan analytics.
+- Mempertahankan pipeline, SLA/bottleneck, dan pekerjaan yang membutuhkan perhatian sebagai fokus tindakan operasional.
+- Memigrasikan page shell, heading, filter cabang, KPI, dan seluruh typography ke token `ui-*` tanpa mengubah state `selectedBranchId`.
+- Menghapus shadow serta radius besar dari KPI; financial summary sekarang berupa definition list datar dengan divider.
+- Memisahkan pipeline dan kesehatan SLA sebagai dua analytical surface yang benar-benar independen.
+- Mengubah attention table ke `ui-table` dengan caption, scoped header, row key, fallback relasi, tabular numerals, dan accessible action label.
+- Menambahkan loading feedback pada filter cabang dan empty state yang eksplisit.
+
+#### 2. Pemindahan analytics ke Laporan Produksi
+
+File terkait:
+
+- `app/Livewire/Reports/ProductionReport.php`
+- `resources/views/livewire/reports/production-report.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Memindahkan perhitungan tren pendapatan realized dari dashboard ke laporan produksi.
+- Menambahkan pilihan tren pendapatan bulanan dan tahunan.
+- Memindahkan funnel konversi penawaran beserta win rate ke laporan produksi.
+- Menjaga filter analytics tetap mengikuti cabang yang dipilih.
+- Menambahkan visual grafik pendapatan dan breakdown status penawaran.
+- Menghapus emoji pada tombol export Excel.
+- Mengganti presentasi status dan SLA di tabel dengan komponen `status-badge` dan `sla-badge` agar lebih konsisten.
+- Mengubah judul dan copy campuran bahasa menjadi **Laporan Produksi**, **Ekspor Excel**, dan istilah Indonesia yang konsisten.
+- Memisahkan filter cabang sebagai scope seluruh halaman dari filter status/tanggal yang hanya berlaku pada tabel dan ekspor, sesuai perilaku query saat ini.
+- Menggunakan satu primary action untuk ekspor lengkap dengan disabled/loading state.
+- Mengubah grafik dan funnel menjadi analytical surface tanpa shadow; conversion rate dibuat netral agar warna semantic hanya dipakai pada outcome.
+- Menambahkan pressed state pada pilihan bulanan/tahunan, label grafik, tooltip yang dapat dipicu keyboard, serta progress semantics pada funnel.
+- Mengubah tabel produksi ke pola flat dengan filter field bersama, caption, scoped header, row key, fallback data, dan pagination kondisional.
+- Menambahkan regression test untuk scope cabang, revenue bulanan/tahunan, outcome/conversion, perbedaan scope filter, dan empty state.
+
+#### 3. Penawaran
+
+File terkait:
+
+- `resources/views/livewire/offers/create.blade.php`
+- `resources/views/livewire/offers/index.blade.php`
+- `resources/views/livewire/offers/partials/form-fields.blade.php`
+- `resources/views/components/offer-outcome-badge.blade.php`
+- `tests/Feature/OffersWorkflowTest.php`
+
+Perubahan yang sudah diterapkan:
+
+- Membedakan field editable dengan nilai hasil kalkulasi.
+- Fee penawaran dan TA tetap ditampilkan sebagai input editable.
+- DPP, PPN, dan PPh tidak lagi ditampilkan seperti input; nilainya sekarang berupa summary read-only.
+- Mengurangi nested card pada bagian kalkulasi keuangan dan menggantinya dengan section divider.
+- Memperbaiki proporsi layout keuangan agar input utama lebih dominan daripada hasil kalkulasi.
+- Mengubah action **+ Jadikan Pekerjaan** dari tombol solid berulang menjadi text action **Jadikan Pekerjaan →** yang lebih tenang.
+- Mengekstrak seluruh field Create/Edit ke satu shared partial agar binding, error, dan visual form tidak kembali berbeda.
+- Mengubah halaman Create menjadi form page datar dengan breadcrumb, empat section bermakna, calculated `<dl>`, dan action footer yang konsisten.
+- Mengubah index menjadi flat toolbar dan table tanpa outer card, lengkap dengan loading state, empty state yang mengikuti filter, caption, scoped header, dan row key.
+- Menambahkan outcome badge semantic dengan label sentence case serta membatasi monospace hanya pada nomor penawaran dan kode.
+- Memigrasikan modal edit dan konversi ke shared modal dengan ukuran 720 px dan 448 px, focus management, Escape/backdrop close, serta scroll lock.
+- Menambahkan loading/disabled state pada simpan dan konversi serta accessible label pada seluruh row action.
+- Menjaga seluruh kontrak `wire:model`, `save`, `edit`, `prepareConvert`, `convertToJob`, `wire:navigate`, dan `wire:confirm`.
+- Menambahkan regression test untuk nomor otomatis, kalkulasi pajak, persist Create/Edit, kombinasi filter, modal state, dan konversi WorkOrder/StatusHistory.
+
+#### 4. Design foundation dan komponen inti
+
+File terkait:
+
+- `tailwind.config.js`
+- `resources/css/app.css`
+- `resources/views/components/*.blade.php`
+- `resources/views/layouts/app.blade.php`
+- `resources/views/layouts/guest.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Menetapkan token light dan dark untuk page background, surface, border, text, brand, success, warning, danger, dan info.
+- Menetapkan radius standar 6 px, 8 px, dan 12 px serta raised shadow khusus modal dan dropdown.
+- Menambahkan primitive layout `ui-page`, page header, section heading, surface, toolbar, table, dan modal.
+- Menetapkan button hierarchy: primary, secondary, ghost, dan danger dengan tinggi minimum 40 px.
+- Menetapkan field input/select/textarea setinggi minimum 40 px, tanpa shadow dekoratif, dengan focus state yang terlihat.
+- Menambahkan table density baseline dengan header 44 px dan row minimum 56 px.
+- Menambahkan semantic badge dan memisahkan workflow status dari success/danger status.
+- Mengubah status workflow menjadi badge bersudut 6 px, bukan pill besar.
+- Menstandardisasi modal ke kategori lebar 448, 576, 640, 720, dan 800 px.
+- Menambahkan focus-visible global, smooth scroll, selection color, tabular numeral utility, dan dukungan `x-cloak`.
+- Mempertahankan Figtree sesuai arahan redesign, lalu melengkapi font weight 400–800 untuk hierarchy yang lebih halus.
+- Menambahkan shared component `select-input` dan `textarea-input`.
+- Mempertahankan pipeline Tailwind v3 yang saat ini aktif; migrasi dependency tidak dicampurkan dengan pekerjaan visual.
+
+#### 5. Daftar pekerjaan
+
+File terkait:
+
+- `resources/views/livewire/work-orders/index.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Menghapus outer card besar yang sebelumnya membungkus toolbar, tabel, dan pagination.
+- Menggunakan page header, toolbar, form control, table, serta badge dari foundation baru.
+- Mengubah heading tabel menjadi sentence case dan merapikan density setiap row.
+- Mempertahankan action row sebagai text action **Buka →**, bukan tombol primary berulang.
+- Mengganti label **Hanya Overdue SLA** menjadi **Hanya SLA terlewat**.
+- Menambahkan loading state ketika pencarian atau filter berubah.
+- Menambahkan empty state yang menjelaskan tindakan berikutnya kepada pengguna.
+- Menambahkan caption tabel, label tersembunyi untuk form control, `scope` pada header, `wire:key`, dan label tombol tutup untuk aksesibilitas.
+- Menggunakan tabular numerals untuk tanggal dan aging serta fallback copy ketika relasi data tidak tersedia.
+
+#### 6. Shell aplikasi, sidebar, dan topbar
+
+File terkait:
+
+- `resources/views/layouts/app.blade.php`
+- `resources/views/livewire/layout/navigation.blade.php`
+- `resources/views/components/app-navigation-links.blade.php`
+- `resources/views/components/navigation-icon.blade.php`
+- `resources/views/components/sidebar-link.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Mengubah sidebar desktop dan mobile dari 256 px menjadi 240 px serta menyelaraskan offset main content dan topbar.
+- Mengubah topbar menjadi 60 px dan menampilkan konteks halaman yang ringkas.
+- Menggunakan token surface, border, text, canvas, dan brand pada seluruh shell aplikasi.
+- Menghilangkan radius dan shadow berlebih pada sidebar, topbar, account trigger, serta theme switcher.
+- Memusatkan daftar menu dalam satu shared component agar versi mobile dan desktop tidak lagi menduplikasi seluruh struktur menu.
+- Mempertahankan seluruh permission gate, named route, active route state, `wire:navigate`, serta proses logout.
+- Mengubah label **Log Out** menjadi **Keluar** dan fallback role **User** menjadi **Pengguna**.
+- Menambahkan shared component untuk sidebar link dan navigation icon dengan stroke yang konsisten.
+- Menambahkan skip link **Lewati ke konten utama** dan target `main-content`.
+- Menambahkan `aria-current` pada menu aktif, label navigasi, state drawer, state theme, label icon button, decorative icon handling, dan penutupan drawer menggunakan Escape.
+- Menambahkan focus trap, scroll lock, penutupan drawer setelah navigasi, serta reset state drawer saat viewport masuk ke desktop.
+- Mengoreksi minimum height area konten menjadi tinggi viewport dikurangi topbar 60 px.
+- Memperbaiki markup logout yang sebelumnya berupa link di dalam button menjadi satu button yang valid.
+- Menjaga shadow hanya pada mobile drawer dan dropdown karena keduanya merupakan floating surface.
+
+#### 7. Detail pekerjaan
+
+File terkait:
+
+- `resources/views/livewire/work-orders/show.blade.php`
+- `resources/views/components/modal.blade.php`
+- `resources/views/components/tab-button.blade.php`
+- `tests/Feature/WorkOrderDetailViewTest.php`
+
+Perubahan yang sudah diterapkan:
+
+- Mengubah header menjadi pola detail page: back navigation, identifier utama, status, SLA, metadata, satu primary action, dan satu secondary action.
+- Menghapus animasi pulse pada overdue dan memakai shared SLA badge.
+- Mengubah workflow menjadi stepper horizontal compact tanpa outer card, dengan current/past/future state yang jelas.
+- Menjaga susunan workflow tetap bergantung pada flag `survey_required` dan mempertahankan action `openStatusModal(...)` pada setiap tahap.
+- Menambahkan semantic ordered list dan `aria-current="step"` pada workflow.
+- Mengubah navigasi tab menjadi shared tab component yang responsif, dapat discroll, dan memiliki `tablist`, `tab`, `tabpanel`, `aria-selected`, serta relasi `aria-controls`.
+- Mengubah informasi pekerjaan dan keuangan menjadi flat definition list dengan divider, bukan nested card.
+- Mengubah angka keuangan dan tanggal menjadi tabular numerals; monospace tetap dibatasi pada nomor kontrak, nomor laporan, dan nomor resi.
+- Mengubah riwayat status menjadi timeline datar dengan semantic article/time, tanpa mini card per kejadian.
+- Mempertahankan SLA dan PIC sebagai context surface independen pada aside karena keduanya memiliki action sendiri.
+- Mengurangi warna workflow/PIC ke brand dan neutral family agar warning/danger tetap bermakna.
+- Mengubah tab aset dan dokumen menjadi flat table dengan caption, scoped header, row key, empty state, dan text action.
+- Mengubah laporan resmi menjadi divided article list dengan financial summary, delivery status, dan hierarchy action yang tenang.
+- Mengganti label **Download** menjadi **Unduh**, menambahkan `rel="noopener"`, dan memberi accessible name pada action yang membuka tab baru.
+- Memigrasikan tujuh modal—aset, laporan, pengiriman, dokumen, status, PIC, dan SLA—ke shared modal dengan ukuran 448 atau 576 px.
+- Menambahkan dialog semantics, labelled title, Escape close, backdrop close, focus management, body scroll lock, responsive field grid, dan loading/disabled submit state.
+- Mengubah seluruh field modal ke shared label/input/select/textarea/error components dan sentence case.
+- Membandingkan kontrak form dengan versi awal; tidak ada `wire:model` atau `wire:submit` yang hilang dan seluruh action handler tetap tersedia.
+- Menambahkan regression test yang memeriksa empat tab dan tujuh entry point modal.
+
+#### 8. Master data dan hak akses
+
+File terkait:
+
+- `resources/views/livewire/master/branches.blade.php`
+- `resources/views/livewire/master/debtors.blade.php`
+- `resources/views/livewire/master/organizations.blade.php`
+- `resources/views/livewire/master/users.blade.php`
+- `resources/views/livewire/master/roles-permissions.blade.php`
+- `resources/views/components/active-status-badge.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Menyamakan lima layar administrasi ke pola `ui-page`, page header, toolbar filter, flat table, pagination, empty state, dan shared modal.
+- Menjaga seluruh pencarian, filter, pagination, create, edit, delete, toggle status, serta assignment role/permission yang sudah ada.
+- Menambahkan label tersembunyi pada filter, caption tabel, `scope` header, `wire:key`, nama action yang kontekstual, dan loading/disabled state.
+- Menggunakan active-status badge untuk membedakan status data master dari workflow pekerjaan.
+- Mengubah layout peran dan hak akses menjadi sidebar peran 256 px dan panel permission fleksibel, tanpa card bersarang.
+- Mengelompokkan permission dalam semantic `fieldset`, menampilkan state peran aktif melalui `aria-pressed`, dan mempertahankan satu action simpan yang dominan.
+- Melokalkan label permission untuk presentation layer tanpa mengganti permission key, nama route, atau role di database.
+- Menambahkan regression test khusus untuk Cabang, Debitur, Organisasi, Pengguna, serta Peran & Hak Akses.
+
+#### 9. Audit aktivitas dan impor data
+
+File terkait:
+
+- `resources/views/livewire/audit/activity-log-index.blade.php`
+- `resources/views/livewire/imports/data-import.blade.php`
+- `resources/views/components/flash-message.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Mengubah audit log menjadi toolbar filter dan flat table dengan action badge, detail IP yang jujur, empty state, serta semantic table markup.
+- Menghapus fallback IP palsu `127.0.0.1`; data kosong sekarang ditampilkan sebagai em dash.
+- Mempertahankan action backup, tetapi tidak menjalankannya selama redesign atau regression test karena bersifat operasional.
+- Mengubah impor menjadi alur dua tahap yang jelas: unggah sumber lalu tinjau staging sebelum proses produksi.
+- Menambahkan shared field/button/flash, feedback loading, batasan format CSV/TXT, ringkasan batch, semantic table, row key, serta tabular financial value.
+- Membedakan item siap diproses, berhasil, dan gagal dengan badge semantic yang benar.
+- Menjaga action `downloadTemplate`, `uploadFile`, `processBatch`, dan `clearStaging` beserta seluruh binding yang sudah ada.
+- Menambahkan regression test audit dan impor dengan storage palsu untuk mencegah penulisan file/data produksi yang tidak disengaja.
+
+#### 10. Welcome, autentikasi, profil, dan halaman 403
+
+File terkait:
+
+- `resources/views/welcome.blade.php`
+- `resources/views/livewire/welcome/navigation.blade.php`
+- `resources/views/layouts/guest.blade.php`
+- `resources/views/livewire/pages/auth/*.blade.php`
+- `resources/views/profile.blade.php`
+- `resources/views/livewire/profile/*.blade.php`
+- `resources/views/errors/403.blade.php`
+- `resources/views/components/application-logo.blade.php`
+- `resources/views/components/auth-heading.blade.php`
+
+Perubahan yang sudah diterapkan:
+
+- Mengganti landing page bergaya marketing menjadi entry page internal yang ringkas, tanpa hero berlebihan, emoji, feature-card buffet, gradient, atau dekorasi generik.
+- Mengganti logo starter Laravel dengan identitas KJPP berbasis SVG yang mengikuti warna teks dan tetap tajam di light/dark mode.
+- Menyatukan shell tamu dengan token aplikasi, preferensi theme tersimpan/system, skip link, dan brand heading yang konsisten.
+- Menstandardisasi Login, Register, Lupa Password, Reset Password, Konfirmasi Password, dan Verifikasi Email tanpa mengubah kontrak Volt, binding, action, atau redirect.
+- Melokalkan copy utama, menambahkan heading/deskripsi yang jelas, validation feedback, serta loading/disabled state pada seluruh submit.
+- Mengubah Profil menjadi halaman datar dengan section informasi akun, password, dan danger zone yang terpisah oleh divider.
+- Menstandardisasi modal hapus akun dan memperbaiki copy agar tidak menjanjikan cascade deletion yang tidak sesuai constraint data.
+- Mengubah halaman 403 menjadi fallback minimal yang hanya menawarkan Dashboard bila user berizin; user lain diarahkan ke Profil agar tidak masuk loop 403.
+- Menambahkan regression test untuk CTA welcome, seluruh account state, tiga form profil, modal hapus akun, dan fallback 403.
+
+### Follow-up behavior dan security
+
+Temuan berikut sengaja **tidak** dicampurkan ke commit visual karena membutuhkan keputusan produk, perubahan otorisasi, atau kontrak data:
+
+#### Pekerjaan
+
+- `delivery_note` tersedia di backend tetapi belum memiliki field pada UI.
+- `selected_asset_ids` masih disinkronkan otomatis dan belum memiliki selector pada form laporan.
+- Permission action masih divalidasi ketika submit; sebagian tombol belum disembunyikan berdasarkan permission.
+- Status `BATAL` ditampilkan melalui status badge, tetapi tidak menjadi tahap pada stepper linear.
+- Scope pencarian record untuk sebagian action edit/hapus perlu audit authorization dan branch isolation terpisah.
+
+#### Penawaran
+
+- Konversi penawaran ke pekerjaan belum memakai transaction/idempotency guard sehingga retry perlu diamankan dari duplikasi pekerjaan atau status history.
+- Field hasil kalkulasi masih berupa public state; backend perlu menghitung ulang nilai turunan sebelum persist.
+- Kombinasi kondisi pencarian `OR` dan filter perlu dikelompokkan agar scope filter tidak terlewati.
+- Record yang sudah dikonversi masih perlu aturan bisnis yang eksplisit tentang field mana yang boleh diedit.
+
+#### Master data dan akun
+
+- Kolom role pada User dan role Spatie masih menjadi dua sumber kebenaran; opsi role pada layar Pengguna juga masih hard-coded.
+- Login belum menolak user dengan status nonaktif.
+- Registrasi publik membuat user dengan string role default tetapi tidak meng-assign role Spatie, sehingga akun baru dapat diarahkan ke Dashboard lalu menerima 403.
+- Email verification memiliki route/screen, tetapi model User belum mengimplementasikan `MustVerifyEmail`.
+- Self-delete perlu keputusan produk, perlindungan last sysadmin, audit trail, dan penanganan foreign key record produksi.
+- Delete organisasi/debitur serta perubahan role perlu failure handling yang lebih ramah ketika terhalang relasi data.
+
+#### Impor data
+
+- `currentBatchId` adalah public property sementara staging belum memiliki ownership; isolasi batch per user perlu ditambahkan.
+- Refresh kehilangan batch aktif dan dapat meninggalkan staging orphan.
+- `clearStaging` belum meminta konfirmasi destructive.
+- Pemrosesan belum transactional/idempotent per item; retry dapat meninggalkan partial write atau duplicate status history.
+- Parser perlu validasi header dan normalisasi format angka/tanggal Indonesia yang lebih ketat.
+- Raw exception pada item gagal sebaiknya diganti pesan aman untuk pengguna dan detailnya dicatat di log.
+- `downloadTemplate` perlu explicit authorization yang konsisten dengan action impor lainnya.
+
+#### Keputusan produk
+
+- Tentukan apakah registrasi publik tetap tersedia, hanya akun admin yang boleh membuat user, atau route `/register` harus ditutup.
+- Tentukan apakah email verification benar-benar diwajibkan atau seluruh account state verifikasi dihapus.
+- Tentukan apakah self-service account deletion diizinkan pada aplikasi internal.
+- Tentukan apakah route `/` tetap menjadi welcome ringkas atau langsung mengarah ke Login.
+
+### Commit Implementasi
+
+Sebanyak **69 file implementasi/test** telah dipecah ke sepuluh commit fungsional:
+
+| Commit | Fungsi |
+|---|---|
+| `d3ae2fa` | Shared design system dan UI foundation. |
+| `7d6b488` | Application shell dan navigasi. |
+| `1b91959` | Workflow daftar/detail pekerjaan. |
+| `87fa23e` | Dashboard dan Laporan Produksi. |
+| `d681845` | Workflow pengelolaan Penawaran. |
+| `06e3f48` | Master data referensi. |
+| `4649c82` | Pengguna, peran, dan hak akses. |
+| `8df3692` | Audit aktivitas. |
+| `0d4e523` | Impor data. |
+| `ff2dbff` | Welcome, autentikasi, profil, dan halaman 403. |
+
+File backend yang berubah tetap dibatasi pada `Dashboard.php` dan `ProductionReport.php` untuk memindahkan analytics; redesign lain mempertahankan kontrak Livewire existing. Commit masih lokal dan belum di-push.
+
+Regression test baru:
+
+- `WorkOrderDetailViewTest.php` — 1 test / 18 assertion.
+- `DashboardAndProductionReportTest.php` — 3 test / 41 assertion.
+- `OffersWorkflowTest.php` — 3 test / 75 assertion.
+- `MasterBranchesTest.php` — 4 test / 39 assertion.
+- `MasterDebtorsTest.php` — 4 test / 33 assertion.
+- `MasterOrganizationsTest.php` — 5 test / 45 assertion.
+- `MasterUsersTest.php` — 8 test / 66 assertion.
+- `MasterRolesPermissionsTest.php` — 5 test / 38 assertion.
+- `ActivityLogViewTest.php` — 7 test / 30 assertion.
+- `DataImportViewTest.php` — 6 test / 57 assertion.
+- `AuthRedesignViewTest.php` — 7 test / 76 assertion.
+
+### Pekerjaan Berikutnya
+
+Urutan lanjutan yang disarankan:
+
+1. Melakukan walkthrough browser pada lebar 360, 768, dan 1280 px untuk light/dark mode, termasuk overflow table, tab, dropdown, dan ketujuh modal pekerjaan.
+2. Menguji keyboard-only flow: skip link, sidebar/drawer, theme switcher, dropdown akun, tab, dialog focus trap/return, serta seluruh form utama.
+3. Memutuskan kebijakan registration, email verification, self-delete, dan perilaku route `/` sebelum mengubah routing atau lifecycle akun.
+4. Menangani hardening authorization, branch isolation, transaction, idempotency, dan ownership batch sebagai fase backend terpisah.
+5. Menambah browser/visual/a11y automation bila diperlukan; test sekarang mengunci render, data, binding, action, dan semantic contract, bukan pixel rendering.
+6. Memverifikasi bahwa scaffold lama yang tidak lagi dipakai dapat dihapus: `resources/views/dashboard.blade.php`, `components/nav-link.blade.php`, dan `components/responsive-nav-link.blade.php`.
+7. Menyelesaikan formatter repository pada commit terpisah agar perubahan style PHP lama tidak tercampur dengan redesign UI.
+
+### Catatan Validasi
+
+- Status ini disusun dari perbandingan terhadap commit awal `e8e6f48` (`feat: add create offer form and update offers index`).
+- Perubahan implementasi tercatat dalam commit `d3ae2fa` sampai `ff2dbff`; dokumentasi dicatat terpisah.
+- `composer validate --strict --no-check-publish` berhasil.
+- `npm.cmd run build` berhasil menggunakan Vite 8.2.1 dan pipeline Tailwind 3; bundle CSS produksi 70,55 kB sebelum gzip.
+- Seluruh Blade template berhasil dikompilasi melalui `php artisan view:cache`.
+- Seluruh test suite berhasil: **86 test, 604 assertion**.
+- Sebelas regression test baru menyumbang 53 test dan 518 assertion untuk kontrak redesign utama.
+- Modified PHP scope (`Dashboard.php` dan `ProductionReport.php`) serta seluruh file test baru sudah lulus Pint terarah.
+- Repository-wide `pint --test` masih menemukan style issue pada file PHP lama di luar scope visual. Formatter tidak dijalankan massal agar tidak mencampur rewrite yang tidak terkait.
+- `git diff --check` tidak menemukan whitespace error setelah dokumentasi final.
+- Checklist visual manual lintas viewport dan dark mode belum dinyatakan selesai.
+
 ## Tujuan Redesign
 
 Target utama redesign adalah menghasilkan tampilan aplikasi yang:
