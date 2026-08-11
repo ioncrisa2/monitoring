@@ -11,11 +11,8 @@ use Livewire\Component;
 class Dashboard extends Component
 {
     public ?int $selectedBranchId = null;
-    public string $revenueView = 'monthly'; // monthly | yearly
 
     private const PIPELINE_STAGES = ['PERSIAPAN', 'SURVEY', 'PENGERJAAN', 'REVIEW', 'CETAK'];
-
-    private const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
     public function render()
     {
@@ -34,10 +31,6 @@ class Dashboard extends Component
         };
 
         // KPI Counters
-        $activeOffersCount = Offer::whereIn('outcome', ['DRAFT', 'DIKIRIM'])
-            ->where($branchQuery)
-            ->count();
-
         $activeWorkOrdersCount = WorkOrder::whereNotIn('current_status', ['SELESAI', 'BATAL'])
             ->where($offerBranchQuery)
             ->count();
@@ -45,19 +38,6 @@ class Dashboard extends Component
         $overdueCount = WorkOrder::whereNotNull('sla_date')
             ->whereDate('sla_date', '<', Carbon::today())
             ->whereNotIn('current_status', ['SELESAI', 'BATAL'])
-            ->where($offerBranchQuery)
-            ->count();
-
-        $pendingSurveyCount = WorkOrder::where('current_status', 'SURVEY')
-            ->where('survey_required', true)
-            ->where($offerBranchQuery)
-            ->count();
-
-        $reviewQueueCount = WorkOrder::where('current_status', 'REVIEW')
-            ->where($offerBranchQuery)
-            ->count();
-
-        $printQueueCount = WorkOrder::where('current_status', 'CETAK')
             ->where($offerBranchQuery)
             ->count();
 
@@ -69,14 +49,14 @@ class Dashboard extends Component
 
         // SLA Compliance Rate (%)
         $totalJobsCount = WorkOrder::where($offerBranchQuery)->count();
-        $slaComplianceRate = $totalJobsCount > 0 
+        $slaComplianceRate = $totalJobsCount > 0
             ? round((($totalJobsCount - $overdueCount) / $totalJobsCount) * 100, 1)
             : 100;
 
         // Financial Pipeline Metrics
         $totalOfferFee = Offer::whereIn('outcome', ['DRAFT', 'DIKIRIM'])->where($branchQuery)->sum('fee');
-        $activeJobFee = WorkOrder::whereNotIn('current_status', ['SELESAI', 'BATAL'])->where($offerBranchQuery)->get()->sum(fn($w) => $w->offer?->fee ?? 0);
-        $completedJobFee = WorkOrder::where('current_status', 'SELESAI')->where($offerBranchQuery)->get()->sum(fn($w) => $w->offer?->fee ?? 0);
+        $activeJobFee = WorkOrder::whereNotIn('current_status', ['SELESAI', 'BATAL'])->where($offerBranchQuery)->get()->sum(fn ($w) => $w->offer?->fee ?? 0);
+        $completedJobFee = WorkOrder::where('current_status', 'SELESAI')->where($offerBranchQuery)->get()->sum(fn ($w) => $w->offer?->fee ?? 0);
 
         // Status Funnel Counts
         $funnelStatuses = [
@@ -95,33 +75,6 @@ class Dashboard extends Component
             ->get()
             ->sortByDesc('aging_days')
             ->take(8);
-
-        // Revenue Trend: fee pekerjaan SELESAI (realized), dikelompokkan per bulan (tahun berjalan) atau per tahun
-        $completedWithFee = WorkOrder::with('offer')
-            ->where('current_status', 'SELESAI')
-            ->whereNotNull('completed_at')
-            ->where($offerBranchQuery)
-            ->get();
-
-        if ($this->revenueView === 'yearly') {
-            $revenueTrend = $completedWithFee
-                ->groupBy(fn ($wo) => $wo->completed_at->year)
-                ->map(fn ($group) => $group->sum(fn ($wo) => $wo->offer?->fee ?? 0))
-                ->sortKeys();
-            $revenueLabels = $revenueTrend->keys()->map(fn ($y) => (string) $y)->all();
-            $revenueValues = $revenueTrend->values()->all();
-        } else {
-            $currentYear = Carbon::now()->year;
-            $byMonth = $completedWithFee
-                ->filter(fn ($wo) => $wo->completed_at->year === $currentYear)
-                ->groupBy(fn ($wo) => $wo->completed_at->month)
-                ->map(fn ($group) => $group->sum(fn ($wo) => $wo->offer?->fee ?? 0));
-            $revenueLabels = self::MONTH_LABELS;
-            $revenueValues = [];
-            for ($m = 1; $m <= 12; $m++) {
-                $revenueValues[] = (float) ($byMonth->get($m) ?? 0);
-            }
-        }
 
         // Rata-rata Durasi per Tahap Pipeline (hanya transisi yang sudah selesai/berpindah, aging yang masih berjalan tidak dihitung)
         $workOrdersWithHistory = WorkOrder::with('statusHistories')
@@ -150,25 +103,11 @@ class Dashboard extends Component
             ];
         }
 
-        // Funnel Konversi Penawaran
-        $outcomeCounts = Offer::where($branchQuery)->get()->countBy('outcome');
-        $outcomeOrder = ['DRAFT', 'DIKIRIM', 'DITERIMA', 'TIDAK_LANJUT', 'DITOLAK'];
-        $offerOutcomeCounts = [];
-        foreach ($outcomeOrder as $outcome) {
-            $offerOutcomeCounts[$outcome] = $outcomeCounts->get($outcome, 0);
-        }
-        $decidedCount = $offerOutcomeCounts['DITERIMA'] + $offerOutcomeCounts['TIDAK_LANJUT'] + $offerOutcomeCounts['DITOLAK'];
-        $conversionRate = $decidedCount > 0 ? round(($offerOutcomeCounts['DITERIMA'] / $decidedCount) * 100, 1) : 0;
-
         $branches = Branch::where('active', true)->get();
 
         return view('livewire.dashboard', [
-            'activeOffersCount' => $activeOffersCount,
             'activeWorkOrdersCount' => $activeWorkOrdersCount,
             'overdueCount' => $overdueCount,
-            'pendingSurveyCount' => $pendingSurveyCount,
-            'reviewQueueCount' => $reviewQueueCount,
-            'printQueueCount' => $printQueueCount,
             'completedThisMonthCount' => $completedThisMonthCount,
             'slaComplianceRate' => $slaComplianceRate,
             'totalOfferFee' => $totalOfferFee,
@@ -176,12 +115,7 @@ class Dashboard extends Component
             'completedJobFee' => $completedJobFee,
             'funnelStatuses' => $funnelStatuses,
             'bottleneckJobs' => $bottleneckJobs,
-            'revenueLabels' => $revenueLabels,
-            'revenueValues' => $revenueValues,
             'stageAverages' => $stageAverages,
-            'offerOutcomeCounts' => $offerOutcomeCounts,
-            'conversionRate' => $conversionRate,
-            'decidedCount' => $decidedCount,
             'branches' => $branches,
         ])->layout('layouts.app');
     }
