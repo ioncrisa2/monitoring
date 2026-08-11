@@ -3,10 +3,45 @@
 ## Status Dokumen
 
 - Tanggal analisis: 12 Agustus 2026.
-- Status: rencana penerapan siap untuk Fase 0 dan renderer spike; migration/API produksi menunggu keputusan Fase 0.
+- Status: vertical slice PDF draft telah diterapkan; finalisasi produksi tetap menunggu keputusan dan aset Fase 0.
 - Sumber: tiga PDF penawaran resmi yang diberikan sebagai acuan.
 - Cakupan: pembuatan, pratinjau, finalisasi, versioning, penyimpanan, dan pengunduhan dokumen penawaran PDF.
 - Prinsip: format visual dan urutan dokumen mengikuti contoh, sedangkan typo, kontradiksi, redaksi legal, tarif pajak, dan penggunaan tanda tangan harus disetujui pemilik proses sebelum masuk template produksi.
+
+### Status implementasi per 12 Agustus 2026
+
+Sudah diterapkan dan dapat diuji:
+
+- Schema additive serta model untuk engagement, banyak pihak/aset/dokumen kepemilikan, fee, termin, requirement, template/profil/penandatangan terversi, nomor atomik, version, dan artifact. Field Penawaran lama tetap dipertahankan.
+- Nomor Penawaran dialokasikan server-side secara atomik, global per tahun. Nilai pada form hanya pratinjau; nomor, tanggal, dan cabang terkunci setelah alokasi. Nomor legacy yang valid dapat diadopsi ke ledger tanpa diubah.
+- Kalkulator fee/pajak integer Rupiah untuk mode `included`, `excluded`, dan `non_taxable`, pembulatan termin, serta terbilang Bahasa Indonesia.
+- Editor dokumen terpisah untuk penerima, referensi, lingkup, banyak pihak/aset, banyak dokumen per aset, fee, pajak, termin, persyaratan, asumsi, dan catatan internal.
+- Penyimpanan draft transactional, scope ID nested terhadap Offer/cabang, optimistic `lock_version`, batas jumlah/nilai input, snapshot deterministik, dan preflight mode draft/review/final.
+- Preview serta unduh PDF draft A4 melalui Dompdf dengan 25 klausul terurut, watermark `DRAF`, kop teks pada halaman ganjil, escaping output, throttle, audit log, dan policy cabang. Remote asset, PHP, JavaScript, signature image, serta stamp dinonaktifkan.
+- Disk privat dan schema version/artifact sudah disiapkan untuk fase arsip/finalisasi, tetapi endpoint saat ini masih merender draft non-persisten.
+
+Keputusan kompatibilitas sementara:
+
+- Aplikasi existing sudah memberikan nomor saat Penawaran disimpan. Slice ini mempertahankan waktu alokasi tersebut, tetapi membuatnya atomik dan immutable. Target desain mengalokasikan nomor saat submit review; waktu final harus diputuskan pada Fase 0 agar draft terbengkalai tidak membakar nomor tanpa kebijakan void/gap.
+- Suffix seperti `.A` dapat diadopsi dari nomor legacy dan dapat diformat allocator, tetapi aturan membuat revisi pada base sequence yang sama belum diaktifkan sebelum arti suffix disetujui.
+- Template, identitas penerbit, dan kalimat legal fallback selalu ditandai provisional/DRAF. Tidak ada PDF final, signature, stamp, atau pengiriman otomatis pada slice ini.
+
+Belum boleh dianggap siap produksi final:
+
+- Redaksi legal 25 klausul, profile penerbit, letterhead/logo resolusi tinggi, font, penandatangan, signature/stamp, tarif pajak, aturan nomor/suffix/void, dan role finalizer belum disetujui.
+- Workflow submit review, approval hash, final artifact immutable, supersede, signed scan, recovery job, dan retensi arsip belum diaktifkan.
+- Golden visual yang membuktikan fixture A/C tepat 5 halaman dan B tepat 13 halaman belum tersedia; renderer saat ini adalah spike draft aman, bukan baseline visual final.
+- Uji 20 request nomor paralel serta migration portability masih perlu dijalankan pada database produksi target (MySQL/PostgreSQL), bukan hanya SQLite test.
+
+Langkah deploy lokal setelah perubahan ini:
+
+```bash
+composer install
+php artisan migrate
+php artisan db:seed --class=RolePermissionSeeder
+npm install
+npm run build
+```
 
 ## 1. Hasil yang Ingin Dicapai
 
