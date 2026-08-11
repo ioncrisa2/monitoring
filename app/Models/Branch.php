@@ -25,4 +25,19 @@ class Branch extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    public function offerNumberAllocations(): HasMany
+    {
+        return $this->hasMany(OfferNumberAllocation::class);
+    }
+
+    public function issuerProfileVersions(): HasMany
+    {
+        return $this->hasMany(IssuerProfileVersion::class);
+    }
+
+    public function documentSignerVersions(): HasMany
+    {
+        return $this->hasMany(DocumentSignerVersion::class);
+    }
 }

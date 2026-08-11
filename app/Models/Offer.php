@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Offer extends Model
@@ -31,6 +32,7 @@ class Offer extends Model
 
     protected $casts = [
         'offer_date' => 'date',
+        'sequence_year' => 'integer',
         'fee' => 'decimal:2',
         'ta' => 'decimal:2',
         'dpp' => 'decimal:2',
@@ -66,5 +68,45 @@ class Offer extends Model
     public function workOrder(): HasOne
     {
         return $this->hasOne(WorkOrder::class);
+    }
+
+    public function engagement(): HasOne
+    {
+        return $this->hasOne(OfferEngagement::class);
+    }
+
+    public function subjects(): HasMany
+    {
+        return $this->hasMany(OfferSubject::class)->orderBy('sort_order');
+    }
+
+    public function feeItems(): HasMany
+    {
+        return $this->hasMany(OfferFeeItem::class)->orderBy('sort_order');
+    }
+
+    public function paymentTerms(): HasMany
+    {
+        return $this->hasMany(OfferPaymentTerm::class)->orderBy('sequence');
+    }
+
+    public function requirements(): HasMany
+    {
+        return $this->hasMany(OfferRequirement::class)->orderBy('sort_order');
+    }
+
+    public function documentVersions(): HasMany
+    {
+        return $this->hasMany(OfferDocumentVersion::class)->orderBy('version_no');
+    }
+
+    public function numberAllocations(): HasMany
+    {
+        return $this->hasMany(OfferNumberAllocation::class)->orderBy('id');
+    }
+
+    public function currentNumberAllocation(): BelongsTo
+    {
+        return $this->belongsTo(OfferNumberAllocation::class, 'current_number_allocation_id');
     }
 }
