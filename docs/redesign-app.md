@@ -365,7 +365,7 @@ Urutan lanjutan yang disarankan:
 - Status ini disusun dari perbandingan terhadap commit awal `e8e6f48` (`feat: add create offer form and update offers index`).
 - Perubahan implementasi tercatat dalam commit `d3ae2fa` sampai `ff2dbff`; dokumentasi dicatat terpisah.
 - `composer validate --strict --no-check-publish` berhasil.
-- `npm.cmd run build` berhasil menggunakan Vite 8.2.1 dan pipeline Tailwind 3; bundle CSS produksi 70,55 kB sebelum gzip.
+- `npm.cmd run build` berhasil menggunakan Vite 8.2.1 dan pipeline Tailwind 3; bundle CSS produksi sekitar 71 kB sebelum gzip.
 - Seluruh Blade template berhasil dikompilasi melalui `php artisan view:cache`.
 - Seluruh test suite berhasil: **86 test, 604 assertion**.
 - Sebelas regression test baru menyumbang 53 test dan 518 assertion untuk kontrak redesign utama.
