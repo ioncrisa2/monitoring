@@ -76,20 +76,6 @@ class Index extends Component
         $this->resetPage();
     }
 
-    public function create(): void
-    {
-        $this->authorize('menu.offers');
-        $this->reset(['editingId', 'offer_no', 'sequence_no', 'branch_id', 'debtor_id', 'client_id', 'report_user_id', 'fee', 'ta', 'dpp', 'ppn', 'pph', 'note']);
-        $this->offer_date = Carbon::today()->format('Y-m-d');
-        $this->outcome = 'DRAFT';
-
-        // Suggest the next sequence number for the current year
-        $this->sequence_no = OfferNumberService::nextSequence((int) Carbon::today()->year);
-        $this->syncOfferNo();
-
-        $this->showModal = true;
-    }
-
     public function edit(int $id): void
     {
         $this->authorize('menu.offers');
@@ -129,10 +115,6 @@ class Index extends Component
 
     public function updatedOfferDate(): void
     {
-        if (!$this->editingId) {
-            $this->sequence_no = OfferNumberService::nextSequence((int) Carbon::parse($this->offer_date)->year);
-        }
-
         $this->syncOfferNo();
     }
 
@@ -186,7 +168,7 @@ class Index extends Component
 
         $duplicate = Offer::where('sequence_no', $validated['sequence_no'])
             ->whereYear('offer_date', $year)
-            ->when($this->editingId, fn ($q) => $q->where('id', '!=', $this->editingId))
+            ->where('id', '!=', $this->editingId)
             ->exists();
 
         if ($duplicate) {
@@ -197,16 +179,10 @@ class Index extends Component
         $validated['offer_no'] = OfferNumberService::build((int) $validated['sequence_no'], (int) $branch->number_code, $offerDate);
         $validated['created_by'] = Auth::id();
 
-        if ($this->editingId) {
-            $offer = Offer::findOrFail($this->editingId);
-            $offer->update($validated);
-            AuditLogService::record('UPDATE', "Memperbarui data penawaran {$offer->offer_no} (Fee: Rp " . number_format($offer->fee, 0, ',', '.') . ")", 'Offer', $offer->id);
-            session()->flash('message', 'Data penawaran berhasil diperbarui.');
-        } else {
-            $offer = Offer::create($validated);
-            AuditLogService::record('CREATE', "Membuat penawaran baru {$offer->offer_no} (Fee: Rp " . number_format($offer->fee, 0, ',', '.') . ")", 'Offer', $offer->id);
-            session()->flash('message', 'Penawaran baru berhasil dibuat.');
-        }
+        $offer = Offer::findOrFail($this->editingId);
+        $offer->update($validated);
+        AuditLogService::record('UPDATE', "Memperbarui data penawaran {$offer->offer_no} (Fee: Rp " . number_format($offer->fee, 0, ',', '.') . ')', 'Offer', $offer->id);
+        session()->flash('message', 'Data penawaran berhasil diperbarui.');
 
         $this->showModal = false;
     }

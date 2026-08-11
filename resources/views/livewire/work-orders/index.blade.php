@@ -5,7 +5,7 @@
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <div>
                     <h2 class="font-bold text-2xl text-gray-800 dark:text-gray-100">
-                        Monitoring Pekerjaan (Work Orders)
+                        Pekerjaan
                     </h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400">Tracking alur proses pengerjaan, status SLA, penugasan PIC, dan aging status real-time.</p>
                 </div>
@@ -48,7 +48,7 @@
 
                         <label class="inline-flex items-center text-xs font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">
                             <input wire:model.live="filterOverdueOnly" type="checkbox" class="rounded border-gray-300 text-rose-600 focus:ring-rose-500">
-                            <span class="ms-2">Hanya Overdue SLA 🔥</span>
+                            <span class="ms-2">Hanya Overdue SLA</span>
                         </label>
                     </div>
                 </div>
@@ -78,42 +78,17 @@
                                     </td>
                                     <td class="px-6 py-4 font-mono text-xs">
                                         <div>{{ $workOrder->sla_date ? $workOrder->sla_date->format('d M Y') : '-' }}</div>
-                                        @if($workOrder->is_overdue)
-                                            <span class="inline-block px-2 py-0.5 mt-1 bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-bold rounded text-[10px]">OVERDUE SLA</span>
-                                        @elseif($workOrder->sla_date && !in_array($workOrder->current_status, ['SELESAI', 'BATAL']))
-                                            <span class="inline-block px-2 py-0.5 mt-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold rounded text-[10px]">SLA OK</span>
-                                        @endif
+                                        <x-sla-badge :overdue="$workOrder->is_overdue" :applicable="$workOrder->sla_date && !in_array($workOrder->current_status, ['SELESAI', 'BATAL'])" class="mt-1" />
                                     </td>
                                     <td class="px-6 py-4">
-                                        @switch($workOrder->current_status)
-                                            @case('SELESAI')
-                                                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">SELESAI</span>
-                                                @break
-                                            @case('REVIEW')
-                                                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">REVIEW</span>
-                                                @break
-                                            @case('PENGERJAAN')
-                                                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">PENGERJAAN</span>
-                                                @break
-                                            @case('SURVEY')
-                                                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">SURVEY</span>
-                                                @break
-                                            @case('CETAK')
-                                                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300">CETAK</span>
-                                                @break
-                                            @case('BATAL')
-                                                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">BATAL</span>
-                                                @break
-                                            @default
-                                                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">PERSIAPAN</span>
-                                        @endswitch
+                                        <x-status-badge :status="$workOrder->current_status" />
                                     </td>
                                     <td class="px-6 py-4 font-mono text-xs text-gray-600 dark:text-gray-300">
                                         {{ $workOrder->aging_days }} hari
                                     </td>
                                     <td class="px-6 py-4 text-right">
-                                        <a href="{{ route('work-orders.show', $workOrder->id) }}" wire:navigate class="inline-flex items-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition shadow">
-                                            Detail & Process &rarr;
+                                        <a href="{{ route('work-orders.show', $workOrder->id) }}" wire:navigate class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 font-medium text-xs">
+                                            Buka &rarr;
                                         </a>
                                     </td>
                                 </tr>

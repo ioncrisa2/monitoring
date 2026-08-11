@@ -39,34 +39,35 @@
                 </div>
             @endif
 
-            <!-- Status Funnel Lifecycle Progress Bar -->
-            <div class="bg-white dark:bg-gray-800 shadow-sm rounded-xl p-6 border border-gray-100 dark:border-gray-700/50 space-y-4">
-                <h3 class="text-xs font-bold uppercase text-gray-400">Alur Status Pengerjaan (Lifecycle Funnel)</h3>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    @php
-                        $statuses = $workOrder->survey_required 
-                            ? ['PERSIAPAN', 'SURVEY', 'PENGERJAAN', 'REVIEW', 'CETAK', 'SELESAI']
-                            : ['PERSIAPAN', 'PENGERJAAN', 'REVIEW', 'CETAK', 'SELESAI'];
-                        $currentIdx = array_search($workOrder->current_status, $statuses);
-                    @endphp
-
+            <!-- Status Lifecycle Stepper -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700/50 px-5 py-3.5">
+                @php
+                    $statuses = $workOrder->survey_required
+                        ? ['PERSIAPAN', 'SURVEY', 'PENGERJAAN', 'REVIEW', 'CETAK', 'SELESAI']
+                        : ['PERSIAPAN', 'PENGERJAAN', 'REVIEW', 'CETAK', 'SELESAI'];
+                    $currentIdx = array_search($workOrder->current_status, $statuses);
+                @endphp
+                <div class="flex items-center overflow-x-auto">
                     @foreach($statuses as $idx => $st)
-                        <div class="flex-1 min-w-[100px]">
-                            <button wire:click="openStatusModal('{{ $st }}')" type="button" 
-                                class="w-full py-3 px-2 rounded-xl text-center font-semibold text-xs transition border cursor-pointer
-                                {{ $workOrder->current_status === $st 
-                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/30 scale-105' 
-                                    : ($currentIdx !== false && $idx < $currentIdx 
-                                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' 
-                                        : 'bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-400') }}">
-                                <div>{{ $st }}</div>
-                                @if($workOrder->current_status === $st)
-                                    <div class="text-[10px] font-normal opacity-90">Status Saat Ini</div>
+                        @php
+                            $isCurrent = $workOrder->current_status === $st;
+                            $isPast = $currentIdx !== false && $idx < $currentIdx;
+                        @endphp
+                        <button wire:click="openStatusModal('{{ $st }}')" type="button" class="flex items-center gap-1.5 shrink-0 group cursor-pointer">
+                            <span class="w-5 h-5 rounded-full flex items-center justify-center shrink-0
+                                {{ $isCurrent
+                                    ? 'bg-indigo-600 ring-4 ring-indigo-100 dark:ring-indigo-900/40'
+                                    : ($isPast ? 'bg-indigo-600' : 'bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600') }}">
+                                @if($isPast)
+                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                @elseif($isCurrent)
+                                    <span class="w-1.5 h-1.5 rounded-full bg-white"></span>
                                 @endif
-                            </button>
-                        </div>
+                            </span>
+                            <span class="text-xs font-semibold whitespace-nowrap {{ $isCurrent ? 'text-indigo-600 dark:text-indigo-400' : ($isPast ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500') }} group-hover:underline">{{ $st }}</span>
+                        </button>
                         @if(!$loop->last)
-                            <div class="hidden md:block text-gray-300 dark:text-gray-600">&rarr;</div>
+                            <div class="w-6 sm:w-10 h-px mx-2 shrink-0 {{ $isPast ? 'bg-indigo-300 dark:bg-indigo-700' : 'bg-gray-200 dark:bg-gray-700' }}"></div>
                         @endif
                     @endforeach
                 </div>
@@ -128,8 +129,8 @@
                                 </div>
                             </div>
 
-                            <div class="p-4 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2 mt-4">
-                                <h4 class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400">Ringkasan Keuangan</h4>
+                            <div class="pt-4 mt-4 border-t border-gray-100 dark:border-gray-700">
+                                <h4 class="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Ringkasan Keuangan</h4>
                                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
                                     <div>
                                         <span class="text-gray-400 block">Fee Total</span>
@@ -153,23 +154,26 @@
 
                         <div class="bg-white dark:bg-gray-800 shadow-sm rounded-xl p-6 border border-gray-100 dark:border-gray-700/50 space-y-4">
                             <h3 class="text-sm font-bold uppercase text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700 pb-2">Timeline Audit Histori Status</h3>
-                            <div class="space-y-4">
+                            <div>
                                 @forelse($workOrder->statusHistories as $history)
-                                    <div class="flex gap-4 items-start">
-                                        <div class="w-2.5 h-2.5 rounded-full bg-indigo-600 dark:bg-indigo-400 mt-1.5 shrink-0"></div>
-                                        <div class="flex-1 text-sm bg-gray-50 dark:bg-gray-900/60 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                                            <div class="flex items-center justify-between">
-                                                <div class="font-semibold text-gray-900 dark:text-white">
-                                                    Status diubah ke <span class="text-indigo-600 dark:text-indigo-400 font-mono">{{ $history->to_status }}</span>
+                                    <div class="relative flex gap-3 pb-5 last:pb-0">
+                                        @if(!$loop->last)
+                                            <div class="absolute left-[5px] top-3 bottom-0 w-px bg-gray-200 dark:bg-gray-700"></div>
+                                        @endif
+                                        <div class="w-2.5 h-2.5 rounded-full bg-indigo-600 dark:bg-indigo-400 mt-1 shrink-0 relative z-10 ring-4 ring-white dark:ring-gray-800"></div>
+                                        <div class="flex-1 text-sm min-w-0">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <span class="font-semibold text-gray-800 dark:text-gray-100">
+                                                    Status diubah ke <span class="text-indigo-600 dark:text-indigo-400">{{ $history->to_status }}</span>
                                                     @if($history->from_status)
-                                                        <span class="text-xs text-gray-400">(dari {{ $history->from_status }})</span>
+                                                        <span class="text-xs text-gray-400 font-normal">(dari {{ $history->from_status }})</span>
                                                     @endif
-                                                </div>
-                                                <div class="text-xs text-gray-400">{{ $history->created_at->format('d M Y, H:i') }}</div>
+                                                </span>
+                                                <span class="text-xs text-gray-400 shrink-0 whitespace-nowrap">{{ $history->created_at->format('d M Y, H:i') }}</span>
                                             </div>
-                                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Oleh: {{ $history->user?->name }}</div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Oleh: {{ $history->user?->name }}</div>
                                             @if($history->note)
-                                                <div class="text-xs text-gray-600 dark:text-gray-300 mt-1 italic">"{{ $history->note }}"</div>
+                                                <div class="text-xs italic text-gray-500 dark:text-gray-400 mt-0.5">"{{ $history->note }}"</div>
                                             @endif
                                         </div>
                                     </div>
@@ -296,33 +300,31 @@
                         </button>
                     </div>
 
-                    <div class="space-y-4">
+                    <div class="divide-y divide-gray-100 dark:divide-gray-700">
                         @forelse($workOrder->reports as $report)
-                            <div class="p-5 rounded-2xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 space-y-4">
-                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-700 pb-3">
+                            <div class="py-4 first:pt-0 last:pb-0 space-y-3">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                     <div>
-                                        <div class="font-mono font-bold text-lg text-indigo-600 dark:text-indigo-400">{{ $report->report_no }}</div>
+                                        <div class="font-mono font-semibold text-indigo-600 dark:text-indigo-400">{{ $report->report_no }}</div>
                                         <div class="text-xs text-gray-500 dark:text-gray-400">Tgl Laporan: {{ $report->report_date->format('d M Y') }} | Tujuan: {{ $report->purpose }}</div>
                                     </div>
-                                    <div class="flex items-center gap-2">
-                                        <button wire:click="openDeliveryModal({{ $report->id }})" type="button" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow cursor-pointer">
-                                            🚚 Status / Resi Pengiriman
-                                        </button>
-                                        <button wire:click="editReport({{ $report->id }})" type="button" class="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg text-xs font-semibold cursor-pointer">Edit</button>
-                                        <button wire:confirm="Yakin hapus laporan ini?" wire:click="deleteReport({{ $report->id }})" type="button" class="px-3 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold cursor-pointer">Hapus</button>
+                                    <div class="flex items-center gap-3 text-xs font-medium">
+                                        <button wire:click="openDeliveryModal({{ $report->id }})" type="button" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 cursor-pointer">Status / Resi Pengiriman</button>
+                                        <button wire:click="editReport({{ $report->id }})" type="button" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 cursor-pointer">Edit</button>
+                                        <button wire:confirm="Yakin hapus laporan ini?" wire:click="deleteReport({{ $report->id }})" type="button" class="text-rose-600 hover:text-rose-900 dark:text-rose-400 cursor-pointer">Hapus</button>
                                     </div>
                                 </div>
 
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-                                    <div class="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono">
+                                    <div>
                                         <span class="text-gray-400 block">Nilai Resume</span>
                                         <span class="font-bold text-gray-900 dark:text-white text-sm">Rp {{ number_format($report->resume_value, 0, ',', '.') }}</span>
                                     </div>
-                                    <div class="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                                    <div>
                                         <span class="text-gray-400 block">Nilai Laporan Final</span>
                                         <span class="font-bold text-emerald-600 dark:text-emerald-400 text-sm">Rp {{ number_format($report->report_value, 0, ',', '.') }}</span>
                                     </div>
-                                    <div class="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                                    <div>
                                         <span class="text-gray-400 block">Tanggal Cetak Laporan</span>
                                         <span class="font-bold text-gray-900 dark:text-white text-sm">{{ $report->print_date ? $report->print_date->format('d M Y') : 'Belum Dicetak' }}</span>
                                     </div>
@@ -330,22 +332,18 @@
 
                                 <!-- Delivery status summary if available -->
                                 @if($report->delivery)
-                                    <div class="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300 flex items-center justify-between">
-                                        <div>
-                                            <strong>Pengiriman ({{ $report->delivery->courier }}):</strong> Resi {{ $report->delivery->tracking_no ?? '-' }} | Tgl Kirim: {{ $report->delivery->sent_date->format('d M Y') }}
-                                        </div>
-                                        <div>
-                                            @if($report->delivery->received_date)
-                                                <span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold">DITERIMA ({{ $report->delivery->received_date->format('d M Y') }})</span>
-                                            @else
-                                                <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-bold">DALAM PERJALANAN</span>
-                                            @endif
-                                        </div>
+                                    <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                                        <span>Pengiriman ({{ $report->delivery->courier }}): Resi {{ $report->delivery->tracking_no ?? '-' }} &middot; Tgl Kirim {{ $report->delivery->sent_date->format('d M Y') }}</span>
+                                        @if($report->delivery->received_date)
+                                            <span class="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded text-[10px] font-bold">DITERIMA {{ $report->delivery->received_date->format('d M Y') }}</span>
+                                        @else
+                                            <span class="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded text-[10px] font-bold">DALAM PERJALANAN</span>
+                                        @endif
                                     </div>
                                 @endif
                             </div>
                         @empty
-                            <div class="p-8 text-center text-gray-500 dark:text-gray-400">Belum ada laporan resmi yang terbit.</div>
+                            <div class="py-8 text-center text-gray-500 dark:text-gray-400">Belum ada laporan resmi yang terbit.</div>
                         @endforelse
                     </div>
                 </div>
@@ -637,8 +635,8 @@
                         <textarea wire:model="status_note" rows="3" placeholder="Masukkan catatan transisi status..." class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500"></textarea>
                     </div>
                     <div class="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <button type="button" wire:click="$set('showStatusModal', false)" class="px-4 py-2 bg-gray-100 text-gray-700 dark:text-gray-300 rounded-lg text-sm">Batal</button>
-                        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Update Status</button>
+                        <button type="button" wire:click="$set('showStatusModal', false)" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium cursor-pointer">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium cursor-pointer">Update Status</button>
                     </div>
                 </form>
             </div>
@@ -668,8 +666,8 @@
                         </select>
                     </div>
                     <div class="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <button type="button" wire:click="$set('showAssignModal', false)" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">Batal</button>
-                        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Simpan Penugasan</button>
+                        <button type="button" wire:click="$set('showAssignModal', false)" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium cursor-pointer">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium cursor-pointer">Simpan Penugasan</button>
                     </div>
                 </form>
             </div>
@@ -693,8 +691,8 @@
                         <label for="edit_survey" class="ms-2 text-sm text-gray-700 dark:text-gray-300 font-medium">Membutuhkan Survey Field</label>
                     </div>
                     <div class="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <button type="button" wire:click="$set('showSlaModal', false)" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">Batal</button>
-                        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Simpan Konfigurasi</button>
+                        <button type="button" wire:click="$set('showSlaModal', false)" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium cursor-pointer">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium cursor-pointer">Simpan Konfigurasi</button>
                     </div>
                 </form>
             </div>

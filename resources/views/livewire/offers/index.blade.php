@@ -10,10 +10,10 @@
                     <p class="text-sm text-gray-500 dark:text-gray-400">Pencatatan penawaran jasa penilaian, kalkulasi fee/pajak, dan konversi ke pekerjaan.</p>
                 </div>
                 <div>
-                    <button wire:click="create" type="button" class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium rounded-lg shadow transition duration-150 cursor-pointer">
+                    <a href="{{ route('offers.create') }}" wire:navigate class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium rounded-lg shadow transition duration-150">
                         <svg class="w-5 h-5 me-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                         Buat Penawaran Baru
-                    </button>
+                    </a>
                 </div>
             </div>
 
@@ -135,7 +135,7 @@
             <div class="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-100 dark:border-gray-700 space-y-5">
                 <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
                     <h3 class="font-semibold text-lg text-gray-900 dark:text-white">
-                        {{ $editingId ? 'Edit Data Penawaran' : 'Buat Penawaran Baru' }}
+                        Edit Data Penawaran
                     </h3>
                     <button wire:click="$set('showModal', false)" type="button" class="text-gray-400 hover:text-gray-600 text-lg cursor-pointer">&times;</button>
                 </div>
@@ -255,7 +255,7 @@
 
                     <div class="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
                         <button type="button" wire:click="$set('showModal', false)" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium cursor-pointer">Batal</button>
-                        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium cursor-pointer">Simpan Penawaran</button>
+                        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium cursor-pointer">Simpan Perubahan</button>
                     </div>
                 </form>
             </div>

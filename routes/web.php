@@ -8,6 +8,7 @@ use App\Livewire\Master\Debtors;
 use App\Livewire\Master\Organizations;
 use App\Livewire\Master\RolesPermissions;
 use App\Livewire\Master\Users;
+use App\Livewire\Offers\Create as OffersCreate;
 use App\Livewire\Offers\Index as OffersIndex;
 use App\Livewire\Reports\ProductionReport;
 use App\Livewire\WorkOrders\Index as WorkOrdersIndex;
@@ -25,6 +26,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Penawaran & Pekerjaan Workflow
     Route::get('/offers', OffersIndex::class)->middleware('permission:menu.offers')->name('offers.index');
+    Route::get('/offers/create', OffersCreate::class)->middleware('permission:menu.offers')->name('offers.create');
     Route::get('/work-orders', WorkOrdersIndex::class)->middleware('permission:menu.work-orders')->name('work-orders.index');
     Route::get('/work-orders/{id}', WorkOrdersShow::class)->middleware('permission:menu.work-orders')->name('work-orders.show');
 

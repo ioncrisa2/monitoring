@@ -350,15 +350,11 @@
                                         {{ $job->aging_days }} Hari
                                     </td>
                                     <td class="px-5 py-3.5">
-                                        <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-mono">
-                                            {{ $job->current_status }}
-                                        </span>
+                                        <x-status-badge :status="$job->current_status" />
                                     </td>
                                     <td class="px-5 py-3.5 font-mono text-xs">
                                         <div>{{ $job->sla_date ? $job->sla_date->format('d M Y') : '-' }}</div>
-                                        @if($job->is_overdue)
-                                            <span class="inline-block px-2 py-0.5 mt-0.5 bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-bold rounded text-[10px]">OVERDUE</span>
-                                        @endif
+                                        <x-sla-badge :overdue="$job->is_overdue" overdue-label="OVERDUE" class="mt-0.5" />
                                     </td>
                                     <td class="px-5 py-3.5 text-xs">
                                         <div>S: {{ $job->surveyors->first()?->user?->name ?? '-' }}</div>
