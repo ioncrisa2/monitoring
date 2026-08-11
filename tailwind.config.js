@@ -15,7 +15,38 @@ export default {
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
             },
+            maxWidth: {
+                app: '90rem',
+            },
+            borderRadius: {
+                'ui-sm': 'var(--ui-radius-sm)',
+                ui: 'var(--ui-radius-md)',
+                'ui-lg': 'var(--ui-radius-lg)',
+            },
+            boxShadow: {
+                raised: 'var(--ui-shadow-raised)',
+            },
             colors: {
+                canvas: 'rgb(var(--ui-page) / <alpha-value>)',
+                surface: {
+                    DEFAULT: 'rgb(var(--ui-surface) / <alpha-value>)',
+                    subtle: 'rgb(var(--ui-surface-subtle) / <alpha-value>)',
+                    muted: 'rgb(var(--ui-surface-muted) / <alpha-value>)',
+                },
+                line: {
+                    DEFAULT: 'rgb(var(--ui-border) / <alpha-value>)',
+                    strong: 'rgb(var(--ui-border-strong) / <alpha-value>)',
+                },
+                ink: {
+                    DEFAULT: 'rgb(var(--ui-text) / <alpha-value>)',
+                    secondary: 'rgb(var(--ui-text-secondary) / <alpha-value>)',
+                    muted: 'rgb(var(--ui-text-muted) / <alpha-value>)',
+                },
+                brand: {
+                    DEFAULT: 'rgb(var(--ui-brand) / <alpha-value>)',
+                    hover: 'rgb(var(--ui-brand-hover) / <alpha-value>)',
+                    soft: 'rgb(var(--ui-brand-soft) / <alpha-value>)',
+                },
                 indigo: {
                     50: '#F2EFFF',
                     100: '#E8E3FF',
