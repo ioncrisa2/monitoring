@@ -15,6 +15,7 @@ class Branches extends Component
     public ?int $editingId = null;
 
     public string $code = '';
+    public ?int $number_code = null;
     public string $name = '';
     public bool $active = true;
 
@@ -22,6 +23,7 @@ class Branches extends Component
     {
         return [
             'code' => 'required|string|max:20|unique:branches,code,' . $this->editingId,
+            'number_code' => 'required|integer|min:0|unique:branches,number_code,' . $this->editingId,
             'name' => 'required|string|max:255',
             'active' => 'boolean',
         ];
@@ -35,7 +37,7 @@ class Branches extends Component
     public function create(): void
     {
         $this->authorize('menu.master-data');
-        $this->reset(['editingId', 'code', 'name', 'active']);
+        $this->reset(['editingId', 'code', 'number_code', 'name', 'active']);
         $this->active = true;
         $this->showModal = true;
     }
@@ -46,6 +48,7 @@ class Branches extends Component
         $branch = Branch::findOrFail($id);
         $this->editingId = $branch->id;
         $this->code = $branch->code;
+        $this->number_code = $branch->number_code;
         $this->name = $branch->name;
         $this->active = $branch->active;
         $this->showModal = true;
@@ -65,7 +68,7 @@ class Branches extends Component
         }
 
         $this->showModal = false;
-        $this->reset(['editingId', 'code', 'name', 'active']);
+        $this->reset(['editingId', 'code', 'number_code', 'name', 'active']);
     }
 
     public function toggleActive(int $id): void

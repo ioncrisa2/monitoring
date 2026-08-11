@@ -11,6 +11,11 @@ use Livewire\Component;
 class Dashboard extends Component
 {
     public ?int $selectedBranchId = null;
+    public string $revenueView = 'monthly'; // monthly | yearly
+
+    private const PIPELINE_STAGES = ['PERSIAPAN', 'SURVEY', 'PENGERJAAN', 'REVIEW', 'CETAK'];
+
+    private const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
     public function render()
     {
@@ -91,6 +96,70 @@ class Dashboard extends Component
             ->sortByDesc('aging_days')
             ->take(8);
 
+        // Revenue Trend: fee pekerjaan SELESAI (realized), dikelompokkan per bulan (tahun berjalan) atau per tahun
+        $completedWithFee = WorkOrder::with('offer')
+            ->where('current_status', 'SELESAI')
+            ->whereNotNull('completed_at')
+            ->where($offerBranchQuery)
+            ->get();
+
+        if ($this->revenueView === 'yearly') {
+            $revenueTrend = $completedWithFee
+                ->groupBy(fn ($wo) => $wo->completed_at->year)
+                ->map(fn ($group) => $group->sum(fn ($wo) => $wo->offer?->fee ?? 0))
+                ->sortKeys();
+            $revenueLabels = $revenueTrend->keys()->map(fn ($y) => (string) $y)->all();
+            $revenueValues = $revenueTrend->values()->all();
+        } else {
+            $currentYear = Carbon::now()->year;
+            $byMonth = $completedWithFee
+                ->filter(fn ($wo) => $wo->completed_at->year === $currentYear)
+                ->groupBy(fn ($wo) => $wo->completed_at->month)
+                ->map(fn ($group) => $group->sum(fn ($wo) => $wo->offer?->fee ?? 0));
+            $revenueLabels = self::MONTH_LABELS;
+            $revenueValues = [];
+            for ($m = 1; $m <= 12; $m++) {
+                $revenueValues[] = (float) ($byMonth->get($m) ?? 0);
+            }
+        }
+
+        // Rata-rata Durasi per Tahap Pipeline (hanya transisi yang sudah selesai/berpindah, aging yang masih berjalan tidak dihitung)
+        $workOrdersWithHistory = WorkOrder::with('statusHistories')
+            ->where($offerBranchQuery)
+            ->get();
+
+        $stageDurations = array_fill_keys(self::PIPELINE_STAGES, []);
+        foreach ($workOrdersWithHistory as $wo) {
+            $histories = $wo->statusHistories->sortBy('created_at')->values();
+            for ($i = 0; $i < $histories->count() - 1; $i++) {
+                $current = $histories[$i];
+                $next = $histories[$i + 1];
+                if (in_array($current->to_status, self::PIPELINE_STAGES, true)) {
+                    $days = $current->created_at->diffInHours($next->created_at) / 24;
+                    $stageDurations[$current->to_status][] = $days;
+                }
+            }
+        }
+
+        $stageAverages = [];
+        foreach (self::PIPELINE_STAGES as $stage) {
+            $samples = $stageDurations[$stage];
+            $stageAverages[$stage] = [
+                'avg' => count($samples) > 0 ? round(array_sum($samples) / count($samples), 1) : 0,
+                'count' => count($samples),
+            ];
+        }
+
+        // Funnel Konversi Penawaran
+        $outcomeCounts = Offer::where($branchQuery)->get()->countBy('outcome');
+        $outcomeOrder = ['DRAFT', 'DIKIRIM', 'DITERIMA', 'TIDAK_LANJUT', 'DITOLAK'];
+        $offerOutcomeCounts = [];
+        foreach ($outcomeOrder as $outcome) {
+            $offerOutcomeCounts[$outcome] = $outcomeCounts->get($outcome, 0);
+        }
+        $decidedCount = $offerOutcomeCounts['DITERIMA'] + $offerOutcomeCounts['TIDAK_LANJUT'] + $offerOutcomeCounts['DITOLAK'];
+        $conversionRate = $decidedCount > 0 ? round(($offerOutcomeCounts['DITERIMA'] / $decidedCount) * 100, 1) : 0;
+
         $branches = Branch::where('active', true)->get();
 
         return view('livewire.dashboard', [
@@ -107,6 +176,12 @@ class Dashboard extends Component
             'completedJobFee' => $completedJobFee,
             'funnelStatuses' => $funnelStatuses,
             'bottleneckJobs' => $bottleneckJobs,
+            'revenueLabels' => $revenueLabels,
+            'revenueValues' => $revenueValues,
+            'stageAverages' => $stageAverages,
+            'offerOutcomeCounts' => $offerOutcomeCounts,
+            'conversionRate' => $conversionRate,
+            'decidedCount' => $decidedCount,
             'branches' => $branches,
         ])->layout('layouts.app');
     }

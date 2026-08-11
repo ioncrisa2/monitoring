@@ -32,6 +32,13 @@
                 </div>
             @endif
 
+            @if (session()->has('error'))
+                <div class="p-4 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-xl text-sm flex items-center justify-between">
+                    <span>{{ session('error') }}</span>
+                    <button type="button" @click="$el.parentElement.remove()" class="text-rose-400 hover:text-rose-600">&times;</button>
+                </div>
+            @endif
+
             <!-- Status Funnel Lifecycle Progress Bar -->
             <div class="bg-white dark:bg-gray-800 shadow-sm rounded-xl p-6 border border-gray-100 dark:border-gray-700/50 space-y-4">
                 <h3 class="text-xs font-bold uppercase text-gray-400">Alur Status Pengerjaan (Lifecycle Funnel)</h3>
@@ -465,9 +472,9 @@
                 <form wire:submit="saveReport" class="space-y-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Nomor Laporan Resmi</label>
-                            <input wire:model="report_no" type="text" placeholder="LAP/2026/0001" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm font-mono focus:ring-2 focus:ring-indigo-500">
-                            @error('report_no') <span class="text-rose-500 text-xs mt-1">{{ $message }}</span> @enderror
+                            <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Nomor Laporan</label>
+                            <input type="text" value="{{ $report_no }}" readonly disabled class="w-full px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 text-gray-600 dark:text-gray-400 text-sm font-mono cursor-not-allowed">
+                            <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Mengikuti Nomor Kontrak pekerjaan ini.</p>
                         </div>
 
                         <div>

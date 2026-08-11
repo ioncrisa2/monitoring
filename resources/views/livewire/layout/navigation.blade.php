@@ -268,7 +268,7 @@ new class extends Component
 
             <!-- Right: User Dropdown with Theme Switcher -->
             <div class="flex items-center gap-2 shrink-0">
-                <x-dropdown align="right" width="60" contentClasses="py-1 bg-white dark:bg-gray-800 rounded-2xl shadow-xl ring-1 ring-black/5 dark:ring-white/10 divide-y divide-gray-100 dark:divide-gray-700/70">
+                <x-dropdown align="right" width="72" contentClasses="py-1 bg-white dark:bg-gray-800 rounded-2xl shadow-xl ring-1 ring-black/5 dark:ring-white/10 divide-y divide-gray-100 dark:divide-gray-700/70">
                     <x-slot name="trigger">
                         <button class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100/80 hover:bg-gray-200/70 dark:bg-gray-700/60 dark:hover:bg-gray-700 border border-gray-200/80 dark:border-gray-600/60 focus:outline-none transition cursor-pointer shadow-sm">
                             <div class="w-6 h-6 rounded-full bg-indigo-600 dark:bg-indigo-500 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs">

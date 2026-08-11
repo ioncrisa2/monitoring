@@ -13,6 +13,7 @@ class Offer extends Model
 
     protected $fillable = [
         'offer_no',
+        'sequence_no',
         'offer_date',
         'branch_id',
         'debtor_id',

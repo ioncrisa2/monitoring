@@ -243,8 +243,8 @@ class Show extends Component
         $this->report_date = Carbon::today()->format('Y-m-d');
         $this->report_purpose = 'Penjaminan Utang';
 
-        $count = Report::whereYear('created_at', date('Y'))->count() + 1;
-        $this->report_no = sprintf('LAP/2026/%04d', $count);
+        // Nomor Laporan mengikuti Nomor Kontrak pekerjaan ini (tidak dibuat terpisah)
+        $this->report_no = $this->workOrder->contract_no;
         $this->selected_asset_ids = $this->workOrder->assets->pluck('id')->toArray();
 
         $this->showReportModal = true;
@@ -268,7 +268,6 @@ class Show extends Component
     {
         $this->authorize('work-orders.review');
         $validated = $this->validate([
-            'report_no' => 'required|string|max:100|unique:reports,report_no,' . $this->editingReportId,
             'report_date' => 'required|date',
             'report_purpose' => 'required|string|max:255',
             'resume_value' => 'nullable|numeric|min:0',
@@ -276,9 +275,21 @@ class Show extends Component
             'print_date' => 'nullable|date',
         ]);
 
+        // Nomor Laporan selalu mengikuti Nomor Kontrak pekerjaan ini
+        $reportNo = $this->workOrder->contract_no;
+
+        $duplicate = Report::where('report_no', $reportNo)
+            ->when($this->editingReportId, fn ($q) => $q->where('id', '!=', $this->editingReportId))
+            ->exists();
+
+        if ($duplicate) {
+            session()->flash('error', "Pekerjaan ini sudah memiliki Laporan dengan nomor {$reportNo} (mengikuti Nomor Kontrak). Edit laporan yang sudah ada, jangan buat baru.");
+            return;
+        }
+
         $data = [
             'work_order_id' => $this->workOrder->id,
-            'report_no' => $validated['report_no'],
+            'report_no' => $reportNo,
             'report_date' => $validated['report_date'],
             'purpose' => $validated['report_purpose'],
             'resume_value' => $validated['resume_value'] ?? 0,

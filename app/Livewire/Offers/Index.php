@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\StatusHistory;
 use App\Models\WorkOrder;
 use App\Services\AuditLogService;
+use App\Services\OfferNumberService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
@@ -27,6 +28,7 @@ class Index extends Component
     public ?int $editingId = null;
 
     public string $offer_no = '';
+    public ?int $sequence_no = null;
     public string $offer_date = '';
     public ?int $branch_id = null;
     public ?int $debtor_id = null;
@@ -77,13 +79,13 @@ class Index extends Component
     public function create(): void
     {
         $this->authorize('menu.offers');
-        $this->reset(['editingId', 'offer_no', 'branch_id', 'debtor_id', 'client_id', 'report_user_id', 'fee', 'ta', 'dpp', 'ppn', 'pph', 'note']);
+        $this->reset(['editingId', 'offer_no', 'sequence_no', 'branch_id', 'debtor_id', 'client_id', 'report_user_id', 'fee', 'ta', 'dpp', 'ppn', 'pph', 'note']);
         $this->offer_date = Carbon::today()->format('Y-m-d');
         $this->outcome = 'DRAFT';
-        
-        // Default offer number suggestion
-        $count = Offer::whereYear('created_at', date('Y'))->count() + 1;
-        $this->offer_no = sprintf('PNW/%s/%04d', date('Y'), $count);
+
+        // Suggest the next sequence number for the current year
+        $this->sequence_no = OfferNumberService::nextSequence((int) Carbon::today()->year);
+        $this->syncOfferNo();
 
         $this->showModal = true;
     }
@@ -94,6 +96,7 @@ class Index extends Component
         $offer = Offer::findOrFail($id);
         $this->editingId = $offer->id;
         $this->offer_no = $offer->offer_no;
+        $this->sequence_no = $offer->sequence_no;
         $this->offer_date = $offer->offer_date->format('Y-m-d');
         $this->branch_id = $offer->branch_id;
         $this->debtor_id = $offer->debtor_id;
@@ -106,14 +109,58 @@ class Index extends Component
         $this->pph = (float) $offer->pph;
         $this->outcome = $offer->outcome;
         $this->note = $offer->note ?? '';
+
+        if ($this->sequence_no) {
+            $this->syncOfferNo();
+        }
+
         $this->showModal = true;
+    }
+
+    public function updatedSequenceNo(): void
+    {
+        $this->syncOfferNo();
+    }
+
+    public function updatedBranchId(): void
+    {
+        $this->syncOfferNo();
+    }
+
+    public function updatedOfferDate(): void
+    {
+        if (!$this->editingId) {
+            $this->sequence_no = OfferNumberService::nextSequence((int) Carbon::parse($this->offer_date)->year);
+        }
+
+        $this->syncOfferNo();
+    }
+
+    public function lastSequenceForYear(): int
+    {
+        $year = $this->offer_date ? Carbon::parse($this->offer_date)->year : Carbon::today()->year;
+
+        return OfferNumberService::lastSequence((int) $year);
+    }
+
+    private function syncOfferNo(): void
+    {
+        if ($this->sequence_no && $this->branch_id && $this->offer_date) {
+            $branch = Branch::find($this->branch_id);
+            if ($branch && !is_null($branch->number_code)) {
+                $this->offer_no = OfferNumberService::build((int) $this->sequence_no, (int) $branch->number_code, Carbon::parse($this->offer_date));
+                return;
+            }
+        }
+
+        $this->offer_no = '';
     }
 
     public function save(): void
     {
         $this->authorize('menu.offers');
         $validated = $this->validate([
-            'offer_no' => 'required|string|max:100|unique:offers,offer_no,' . $this->editingId,
+            'sequence_no' => 'required|integer|min:1',
             'offer_date' => 'required|date',
             'branch_id' => 'required|exists:branches,id',
             'debtor_id' => 'required|exists:debtors,id',
@@ -128,6 +175,26 @@ class Index extends Component
             'note' => 'nullable|string',
         ]);
 
+        $branch = Branch::findOrFail($validated['branch_id']);
+        if (is_null($branch->number_code)) {
+            $this->addError('branch_id', 'Cabang ini belum memiliki Kode Angka. Atur terlebih dahulu di menu Master Cabang.');
+            return;
+        }
+
+        $offerDate = Carbon::parse($validated['offer_date']);
+        $year = (int) $offerDate->year;
+
+        $duplicate = Offer::where('sequence_no', $validated['sequence_no'])
+            ->whereYear('offer_date', $year)
+            ->when($this->editingId, fn ($q) => $q->where('id', '!=', $this->editingId))
+            ->exists();
+
+        if ($duplicate) {
+            $this->addError('sequence_no', "Nomor urut {$validated['sequence_no']} sudah digunakan untuk tahun {$year}. Saran nomor berikutnya: " . OfferNumberService::nextSequence($year) . '.');
+            return;
+        }
+
+        $validated['offer_no'] = OfferNumberService::build((int) $validated['sequence_no'], (int) $branch->number_code, $offerDate);
         $validated['created_by'] = Auth::id();
 
         if ($this->editingId) {

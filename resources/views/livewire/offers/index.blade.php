@@ -143,20 +143,21 @@
                 <form wire:submit="save" class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Nomor Penawaran</label>
-                            <input wire:model="offer_no" type="text" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm font-mono focus:ring-2 focus:ring-indigo-500">
-                            @error('offer_no') <span class="text-rose-500 text-xs mt-1">{{ $message }}</span> @enderror
+                            <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Nomor Urut</label>
+                            <input wire:model.live="sequence_no" type="number" min="1" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500">
+                            <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Nomor urut terakhir tahun {{ \Carbon\Carbon::parse($offer_date ?: now())->year }}: {{ $this->lastSequenceForYear() }}</p>
+                            @error('sequence_no') <span class="text-rose-500 text-xs mt-1">{{ $message }}</span> @enderror
                         </div>
 
                         <div>
                             <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Tanggal Penawaran</label>
-                            <input wire:model="offer_date" type="date" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500">
+                            <input wire:model.live="offer_date" type="date" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500">
                             @error('offer_date') <span class="text-rose-500 text-xs mt-1">{{ $message }}</span> @enderror
                         </div>
 
                         <div>
                             <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Cabang</label>
-                            <select wire:model="branch_id" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500">
+                            <select wire:model.live="branch_id" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500">
                                 <option value="">Pilih Cabang</option>
                                 @foreach($branches as $b)
                                     <option value="{{ $b->id }}">{{ $b->name }}</option>
@@ -164,6 +165,11 @@
                             </select>
                             @error('branch_id') <span class="text-rose-500 text-xs mt-1">{{ $message }}</span> @enderror
                         </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Nomor Penawaran (Otomatis)</label>
+                        <input type="text" value="{{ $offer_no ?: 'Pilih cabang & isi nomor urut untuk melihat pratinjau' }}" readonly disabled class="w-full px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 text-gray-600 dark:text-gray-400 text-sm font-mono cursor-not-allowed">
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

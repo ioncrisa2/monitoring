@@ -16,7 +16,7 @@ class ProductionReport extends Component
 
     public function exportExcel(ProductionExportService $exportService)
     {
-        return $exportService->exportCsv(
+        return $exportService->exportXlsx(
             $this->selectedBranchId ?: null,
             $this->fromDate ?: null,
             $this->toDate ?: null,

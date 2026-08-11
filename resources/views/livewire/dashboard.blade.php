@@ -99,6 +99,114 @@
                 </div>
             </div>
 
+            <!-- Revenue Trend Widget -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700/50 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-bold uppercase text-gray-700 dark:text-gray-300">Tren Pendapatan (Realized)</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Fee pekerjaan berstatus SELESAI, dihitung dari tanggal penyelesaian &mdash; {{ $revenueView === 'yearly' ? 'per tahun' : 'per bulan, tahun ' . now()->year }}.</p>
+                    </div>
+                    <div class="flex items-center p-1 rounded-xl bg-gray-100 dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700/60 self-start">
+                        <button type="button" wire:click="$set('revenueView', 'monthly')"
+                                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer {{ $revenueView === 'monthly' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200' }}">
+                            Bulanan
+                        </button>
+                        <button type="button" wire:click="$set('revenueView', 'yearly')"
+                                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer {{ $revenueView === 'yearly' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200' }}">
+                            Tahunan
+                        </button>
+                    </div>
+                </div>
+
+                @php
+                    $rvW = 760; $rvH = 220;
+                    $padL = 64; $padR = 16; $padT = 16; $padB = 28;
+                    $plotW = $rvW - $padL - $padR;
+                    $plotH = $rvH - $padT - $padB;
+                    $rvN = count($revenueValues);
+                    $rvMaxRaw = count($revenueValues) ? max($revenueValues) : 0;
+                    $rvMax = $rvMaxRaw > 0 ? $rvMaxRaw * 1.15 : 1;
+                    $stepX = $rvN > 1 ? $plotW / ($rvN - 1) : 0;
+
+                    $rvPoints = [];
+                    foreach ($revenueValues as $i => $val) {
+                        $x = $padL + ($rvN > 1 ? $i * $stepX : $plotW / 2);
+                        $y = $padT + $plotH - ($val / $rvMax) * $plotH;
+                        $rvPoints[] = ['x' => $x, 'y' => $y, 'val' => $val, 'label' => $revenueLabels[$i] ?? ''];
+                    }
+
+                    $linePath = '';
+                    foreach ($rvPoints as $i => $p) {
+                        $linePath .= ($i === 0 ? 'M' : ' L') . round($p['x'], 1) . ',' . round($p['y'], 1);
+                    }
+                    $areaPath = $linePath;
+                    if (count($rvPoints) > 0) {
+                        $baseline = $padT + $plotH;
+                        $areaPath .= ' L' . round($rvPoints[count($rvPoints) - 1]['x'], 1) . ',' . $baseline;
+                        $areaPath .= ' L' . round($rvPoints[0]['x'], 1) . ',' . $baseline . ' Z';
+                    }
+
+                    $compactRupiah = function ($v) {
+                        if ($v >= 1_000_000_000) return 'Rp ' . rtrim(rtrim(number_format($v / 1_000_000_000, 1, ',', '.'), '0'), ',') . ' M';
+                        if ($v >= 1_000_000) return 'Rp ' . rtrim(rtrim(number_format($v / 1_000_000, 1, ',', '.'), '0'), ',') . ' Jt';
+                        if ($v >= 1_000) return 'Rp ' . rtrim(rtrim(number_format($v / 1_000, 1, ',', '.'), '0'), ',') . ' Rb';
+                        return 'Rp ' . number_format($v, 0, ',', '.');
+                    };
+
+                    $gridLines = [];
+                    for ($g = 0; $g <= 3; $g++) {
+                        $gVal = $rvMax * $g / 3;
+                        $gY = $padT + $plotH - ($gVal / $rvMax) * $plotH;
+                        $gridLines[] = ['y' => $gY, 'label' => $compactRupiah($gVal)];
+                    }
+                @endphp
+
+                @if($rvMaxRaw <= 0)
+                    <div class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Belum ada pekerjaan SELESAI pada periode ini.</div>
+                @else
+                    <div class="relative" x-data="{ tip: null }">
+                        <svg viewBox="0 0 {{ $rvW }} {{ $rvH }}" class="w-full h-auto select-none" preserveAspectRatio="xMidYMid meet">
+                            <!-- Gridlines -->
+                            @foreach($gridLines as $gl)
+                                <line x1="{{ $padL }}" y1="{{ $gl['y'] }}" x2="{{ $rvW - $padR }}" y2="{{ $gl['y'] }}" class="stroke-gray-200 dark:stroke-gray-700" stroke-width="1" />
+                                <text x="{{ $padL - 8 }}" y="{{ $gl['y'] + 3 }}" text-anchor="end" class="fill-gray-400 dark:fill-gray-500" font-size="10">{{ $gl['label'] }}</text>
+                            @endforeach
+
+                            <!-- Area fill -->
+                            <path d="{{ $areaPath }}" class="fill-indigo-500" fill-opacity="0.1" stroke="none" />
+                            <!-- Line -->
+                            <path d="{{ $linePath }}" fill="none" class="stroke-indigo-600 dark:stroke-indigo-400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+
+                            <!-- X labels -->
+                            @foreach($rvPoints as $i => $p)
+                                @if($rvN <= 12 || $i % 2 === 0 || $i === $rvN - 1)
+                                    <text x="{{ $p['x'] }}" y="{{ $rvH - 8 }}" text-anchor="middle" class="fill-gray-400 dark:fill-gray-500" font-size="10">{{ $p['label'] }}</text>
+                                @endif
+                            @endforeach
+
+                            <!-- Points + hit targets -->
+                            @foreach($rvPoints as $i => $p)
+                                <circle cx="{{ $p['x'] }}" cy="{{ $p['y'] }}" r="4" class="fill-indigo-600 dark:fill-indigo-400 stroke-white dark:stroke-gray-800" stroke-width="2" />
+                                <circle cx="{{ $p['x'] }}" cy="{{ $p['y'] }}" r="14" fill="transparent" class="cursor-pointer"
+                                        @mouseenter="tip = { x: {{ $p['x'] }}, y: {{ $p['y'] }}, label: '{{ $p['label'] }}', val: '{{ $compactRupiah($p['val']) }}' }"
+                                        @mouseleave="tip = null" />
+                                @if($i === $rvN - 1)
+                                    <text x="{{ $p['x'] - 6 }}" y="{{ $p['y'] - 10 }}" text-anchor="end" class="fill-gray-700 dark:fill-gray-200" font-size="11" font-weight="700">{{ $compactRupiah($p['val']) }}</text>
+                                @endif
+                            @endforeach
+                        </svg>
+
+                        <!-- Tooltip -->
+                        <div x-show="tip" x-cloak
+                             :style="tip ? `left: ${(tip.x / {{ $rvW }}) * 100}%; top: ${(tip.y / {{ $rvH }}) * 100}%;` : ''"
+                             class="absolute -translate-x-1/2 -translate-y-full -mt-2 px-2.5 py-1.5 bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg text-xs whitespace-nowrap pointer-events-none z-10">
+                            <span class="font-bold" x-text="tip ? tip.val : ''"></span>
+                            <span class="text-gray-300" x-text="tip ? ' · ' + tip.label : ''"></span>
+                        </div>
+                    </div>
+                @endif
+            </div>
+
             <!-- Status Funnel Lifecycle Progress Bar Widget -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700/50 shadow-sm space-y-4">
                 <h3 class="text-sm font-bold uppercase text-gray-700 dark:text-gray-300">Status Funnel Pengerjaan (Active Workload)</h3>
@@ -110,6 +218,97 @@
                             <div class="text-[10px] text-gray-400">Pekerjaan</div>
                         </div>
                     @endforeach
+                </div>
+            </div>
+
+            <!-- Stage Duration & Conversion Funnel Widgets -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <!-- Rata-rata Durasi per Tahap Pipeline -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700/50 shadow-sm space-y-4">
+                    <div>
+                        <h3 class="text-sm font-bold uppercase text-gray-700 dark:text-gray-300">Rata-rata Durasi per Tahap</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Rata-rata lama sebuah pekerjaan mengendap di tiap tahap sebelum berpindah ke tahap berikutnya.</p>
+                    </div>
+
+                    @php
+                        // Emphasis pattern: the bottleneck stage carries the accent hue, the rest stay neutral context.
+                        $maxStageAvg = max(1, collect($stageAverages)->max('avg'));
+                        $bottleneckStage = collect($stageAverages)->sortByDesc(fn ($s) => $s['avg'])->keys()->first();
+                    @endphp
+
+                    <div class="space-y-3">
+                        @foreach($stageAverages as $stage => $data)
+                            @php
+                                $isBottleneck = $data['avg'] > 0 && $stage === $bottleneckStage;
+                                $shade = $isBottleneck ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-gray-400 dark:bg-gray-600';
+                                $widthPct = $data['avg'] > 0 ? max(6, ($data['avg'] / $maxStageAvg) * 100) : 0;
+                            @endphp
+                            <div>
+                                <div class="flex items-center justify-between text-xs mb-1">
+                                    <span class="font-bold font-mono text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
+                                        {{ $stage }}
+                                        @if($isBottleneck)
+                                            <span class="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold normal-case">Bottleneck</span>
+                                        @endif
+                                    </span>
+                                    <span class="text-gray-400">{{ $data['count'] }} sampel</span>
+                                </div>
+                                <div class="relative h-5 bg-gray-100 dark:bg-gray-900/60 rounded-r-md overflow-hidden">
+                                    @if($data['avg'] > 0)
+                                        <div class="h-5 {{ $shade }} rounded-r-md flex items-center justify-end pr-2 transition-all hover:brightness-110" style="width: {{ $widthPct }}%">
+                                            <span class="text-[10px] font-bold text-white whitespace-nowrap">{{ $data['avg'] }} hari</span>
+                                        </div>
+                                    @else
+                                        <span class="absolute inset-y-0 left-2 flex items-center text-[10px] text-gray-400">Belum ada data</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
+                <!-- Funnel Konversi Penawaran -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700/50 shadow-sm space-y-4">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-bold uppercase text-gray-700 dark:text-gray-300">Funnel Konversi Penawaran</h3>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Win-rate dari penawaran yang sudah diputuskan (tidak termasuk yang masih Draft/Dikirim).</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <div class="text-3xl font-extrabold font-mono {{ $conversionRate >= 50 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400' }}">{{ $conversionRate }}%</div>
+                            <div class="text-[10px] text-gray-400">{{ $offerOutcomeCounts['DITERIMA'] }} dari {{ $decidedCount }} diputuskan</div>
+                        </div>
+                    </div>
+
+                    @php
+                        $outcomeMeta = [
+                            'DRAFT' => ['label' => 'Draft', 'bar' => 'bg-gray-400 dark:bg-gray-500', 'dot' => 'bg-gray-400 dark:bg-gray-500'],
+                            'DIKIRIM' => ['label' => 'Dikirim', 'bar' => 'bg-blue-500 dark:bg-blue-600', 'dot' => 'bg-blue-500 dark:bg-blue-600'],
+                            'DITERIMA' => ['label' => 'Diterima', 'bar' => 'bg-emerald-500 dark:bg-emerald-600', 'dot' => 'bg-emerald-500 dark:bg-emerald-600'],
+                            'TIDAK_LANJUT' => ['label' => 'Tidak Lanjut', 'bar' => 'bg-amber-500 dark:bg-amber-600', 'dot' => 'bg-amber-500 dark:bg-amber-600'],
+                            'DITOLAK' => ['label' => 'Ditolak', 'bar' => 'bg-rose-500 dark:bg-rose-600', 'dot' => 'bg-rose-500 dark:bg-rose-600'],
+                        ];
+                        $totalOffers = max(1, array_sum($offerOutcomeCounts));
+                    @endphp
+
+                    <div class="space-y-2.5">
+                        @foreach($offerOutcomeCounts as $outcome => $count)
+                            @php $meta = $outcomeMeta[$outcome]; $pct = ($count / $totalOffers) * 100; @endphp
+                            <div class="flex items-center gap-3">
+                                <div class="flex items-center gap-1.5 w-28 shrink-0">
+                                    <span class="w-2 h-2 rounded-full {{ $meta['dot'] }}"></span>
+                                    <span class="text-xs font-medium text-gray-600 dark:text-gray-300">{{ $meta['label'] }}</span>
+                                </div>
+                                <div class="flex-1 h-5 bg-gray-100 dark:bg-gray-900/60 rounded-r-md overflow-hidden">
+                                    @if($count > 0)
+                                        <div class="h-5 {{ $meta['bar'] }} rounded-r-md flex items-center justify-end pr-2 transition-all hover:brightness-110" style="width: {{ max(8, $pct) }}%">
+                                            <span class="text-[10px] font-bold text-white">{{ $count }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
             </div>
 

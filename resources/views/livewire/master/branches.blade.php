@@ -39,6 +39,7 @@
                         <thead class="bg-gray-50 dark:bg-gray-900/60 text-xs uppercase font-semibold text-gray-500 dark:text-gray-400">
                             <tr>
                                 <th class="px-6 py-3.5">Kode</th>
+                                <th class="px-6 py-3.5">Kode Angka</th>
                                 <th class="px-6 py-3.5">Nama Cabang</th>
                                 <th class="px-6 py-3.5">Total User</th>
                                 <th class="px-6 py-3.5">Status</th>
@@ -50,6 +51,13 @@
                                 <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition">
                                     <td class="px-6 py-4 font-semibold text-gray-900 dark:text-white">
                                         <span class="inline-block px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 rounded font-mono text-xs">{{ $branch->code }}</span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        @if(is_null($branch->number_code))
+                                            <span class="text-rose-500 text-xs font-medium">Belum diatur</span>
+                                        @else
+                                            <span class="inline-block px-2.5 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded font-mono text-xs">{{ $branch->number_code }}</span>
+                                        @endif
                                     </td>
                                     <td class="px-6 py-4 font-medium text-gray-800 dark:text-gray-200">{{ $branch->name }}</td>
                                     <td class="px-6 py-4">{{ $branch->users_count }} Pengguna</td>
@@ -68,7 +76,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Tidak ada data cabang ditemukan.</td>
+                                    <td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Tidak ada data cabang ditemukan.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -98,6 +106,13 @@
                         <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Kode Cabang</label>
                         <input wire:model="code" type="text" placeholder="Contoh: PST, JKT, SUB" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500">
                         @error('code') <span class="text-rose-500 text-xs mt-1">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Kode Angka (Penomoran Penawaran)</label>
+                        <input wire:model="number_code" type="number" min="0" placeholder="0 = Kantor Pusat, 1/2/3 dst = Cabang" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500">
+                        <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Dipakai sebagai digit cabang pada nomor penawaran/kontrak, mis. .../0/VIII/2026. Gunakan 0 untuk Kantor Pusat.</p>
+                        @error('number_code') <span class="text-rose-500 text-xs mt-1">{{ $message }}</span> @enderror
                     </div>
 
                     <div>
