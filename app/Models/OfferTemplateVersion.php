@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasImmutableOfferDocumentApproval;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OfferTemplateVersion extends Model
 {
+    use HasImmutableOfferDocumentApproval;
+
     protected $fillable = [
         'offer_template_id',
         'version_no',
@@ -18,7 +21,6 @@ class OfferTemplateVersion extends Model
         'header_mode',
         'status',
         'effective_from',
-        'checksum',
         'approved_by',
         'approved_at',
     ];

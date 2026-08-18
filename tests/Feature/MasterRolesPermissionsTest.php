@@ -7,6 +7,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -37,6 +38,37 @@ class MasterRolesPermissionsTest extends TestCase
             ->assertSee('Peran dan Hak Akses')
             ->assertSee('Daftar peran')
             ->assertSee('Hak akses');
+    }
+
+    public function test_menu_permission_alone_cannot_access_route_or_livewire_component(): void
+    {
+        $menuOnlyUser = User::factory()->create(['role' => 'surveyor']);
+        $menuOnlyUser->givePermissionTo('menu.master-users');
+
+        $this->actingAs($menuOnlyUser)
+            ->get(route('master.roles-permissions'))
+            ->assertForbidden();
+
+        Livewire::actingAs($menuOnlyUser)
+            ->test(RolesPermissions::class)
+            ->assertStatus(403);
+    }
+
+    public function test_users_manage_permission_allows_route_and_livewire_without_menu_permission(): void
+    {
+        $manager = User::factory()->create(['role' => 'surveyor']);
+        $manager->givePermissionTo('users.manage');
+
+        $this->assertFalse($manager->can('menu.master-users'));
+
+        $this->actingAs($manager)
+            ->get(route('master.roles-permissions'))
+            ->assertOk();
+
+        Livewire::actingAs($manager)
+            ->test(RolesPermissions::class)
+            ->assertStatus(200)
+            ->assertSee('Peran dan Hak Akses');
     }
 
     public function test_initial_and_selected_role_state_matches_the_rendered_checkbox_bindings(): void
@@ -109,6 +141,68 @@ class MasterRolesPermissionsTest extends TestCase
 
         $this->assertEqualsCanonicalizing(
             $permissions,
+            $role->fresh()->permissions()->pluck('name')->all(),
+        );
+    }
+
+    public function test_sysadmin_permissions_cannot_be_mutated(): void
+    {
+        $role = Role::findByName('sysadmin');
+        $originalPermissions = $role->permissions()->pluck('name')->all();
+
+        Livewire::actingAs($this->user)
+            ->test(RolesPermissions::class)
+            ->call('selectRole', $role->id)
+            ->set('selectedPermissions', ['menu.dashboard'])
+            ->call('savePermissions')
+            ->assertHasErrors('selectedRoleId')
+            ->assertSee('Hak akses role sysadmin dilindungi');
+
+        $this->assertEqualsCanonicalizing(
+            $originalPermissions,
+            $role->fresh()->permissions()->pluck('name')->all(),
+        );
+    }
+
+    public function test_actor_cannot_mutate_a_role_assigned_to_their_own_account(): void
+    {
+        $role = Role::create(['name' => 'security_manager', 'guard_name' => 'web']);
+        $role->syncPermissions(['users.manage', 'menu.dashboard']);
+        $actor = User::factory()->create(['role' => 'security_manager']);
+        $originalPermissions = $role->permissions()->pluck('name')->all();
+
+        Livewire::actingAs($actor)
+            ->test(RolesPermissions::class)
+            ->call('selectRole', $role->id)
+            ->set('selectedPermissions', ['users.manage'])
+            ->call('savePermissions')
+            ->assertHasErrors('selectedRoleId')
+            ->assertSee('akun sendiri');
+
+        $this->assertEqualsCanonicalizing(
+            $originalPermissions,
+            $role->fresh()->permissions()->pluck('name')->all(),
+        );
+    }
+
+    public function test_unknown_or_non_web_permission_is_rejected_without_partial_sync(): void
+    {
+        Permission::create(['name' => 'api.unsafe', 'guard_name' => 'api']);
+        $role = Role::findByName('surveyor');
+        $originalPermissions = $role->permissions()->pluck('name')->all();
+
+        Livewire::actingAs($this->user)
+            ->test(RolesPermissions::class)
+            ->call('selectRole', $role->id)
+            ->set('selectedPermissions', ['menu.dashboard', 'unknown.permission', 'api.unsafe'])
+            ->call('savePermissions')
+            ->assertHasErrors([
+                'selectedPermissions.1',
+                'selectedPermissions.2',
+            ]);
+
+        $this->assertEqualsCanonicalizing(
+            $originalPermissions,
             $role->fresh()->permissions()->pluck('name')->all(),
         );
     }

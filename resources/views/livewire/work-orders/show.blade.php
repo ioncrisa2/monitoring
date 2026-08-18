@@ -18,14 +18,35 @@
                     </p>
                 </div>
 
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <button wire:click="$set('showSlaModal', true)" type="button" class="ui-btn ui-btn-secondary">
-                        Atur SLA & survey
-                    </button>
-                    <button wire:click="$set('showAssignModal', true)" type="button" class="ui-btn ui-btn-primary">
-                        Atur PIC
-                    </button>
-                </div>
+                @php
+                    $canMarkSurveyComplete = $canSurvey && $workOrder->current_status === 'SURVEY';
+                    $canMarkReviewComplete = $canReview && $workOrder->current_status === 'REVIEW';
+                @endphp
+
+                @if($canMarkSurveyComplete || $canMarkReviewComplete || $canEditSla || $canAssignPic)
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        @if($canMarkSurveyComplete)
+                            <button wire:click="markSurveyComplete" wire:confirm="Tandai aset sudah selesai disurvey dan lanjutkan ke tahap Pengerjaan?" type="button" class="ui-btn ui-btn-primary">
+                                Sudah disurvey
+                            </button>
+                        @endif
+                        @if($canMarkReviewComplete)
+                            <button wire:click="markReviewComplete" wire:confirm="Tandai laporan sudah selesai direview dan lanjutkan ke tahap Cetak?" type="button" class="ui-btn ui-btn-primary">
+                                Sudah direview
+                            </button>
+                        @endif
+                        @if($canEditSla)
+                            <button wire:click="$set('showSlaModal', true)" type="button" class="ui-btn ui-btn-secondary">
+                                Atur SLA & survey
+                            </button>
+                        @endif
+                        @if($canAssignPic)
+                            <button wire:click="$set('showAssignModal', true)" type="button" class="ui-btn ui-btn-primary">
+                                Atur PIC
+                            </button>
+                        @endif
+                    </div>
+                @endif
             </header>
 
             @if (session()->has('message'))
@@ -60,7 +81,12 @@
                             $isPast = $currentIdx !== false && $idx < $currentIdx;
                         @endphp
                         <li class="flex shrink-0 items-center">
-                            <button wire:click="openStatusModal('{{ $st }}')" type="button" @if($isCurrent) aria-current="step" @endif class="group flex shrink-0 items-center gap-2 rounded-ui-sm py-1 focus-visible:outline-offset-4">
+                            <button
+                                type="button"
+                                @if($canChangeStatus) wire:click="openStatusModal('{{ $st }}')" @else disabled @endif
+                                @if($isCurrent) aria-current="step" @endif
+                                class="group flex shrink-0 items-center gap-2 rounded-ui-sm py-1 focus-visible:outline-offset-4 {{ $canChangeStatus ? '' : 'cursor-default' }}"
+                            >
                                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full
                                     {{ $isCurrent
                                         ? 'bg-brand ring-4 ring-brand-soft'
@@ -190,7 +216,9 @@
                         <section class="ui-surface p-5" aria-labelledby="sla-overview-heading">
                             <div class="flex items-center justify-between gap-3 border-b border-line pb-3">
                                 <h2 id="sla-overview-heading" class="ui-section-heading">Status & SLA</h2>
-                                <button wire:click="$set('showSlaModal', true)" type="button" class="ui-text-action -my-1">Ubah</button>
+                                @if($canEditSla)
+                                    <button wire:click="$set('showSlaModal', true)" type="button" class="ui-text-action -my-1">Ubah</button>
+                                @endif
                             </div>
                             <dl class="mt-4 space-y-3 text-sm">
                                 <div class="flex items-center justify-between gap-4">
@@ -211,7 +239,9 @@
                         <section class="ui-surface p-5" aria-labelledby="pic-heading">
                             <div class="flex items-center justify-between gap-3 border-b border-line pb-3">
                                 <h2 id="pic-heading" class="ui-section-heading">Penugasan PIC</h2>
-                                <button wire:click="$set('showAssignModal', true)" type="button" class="ui-text-action -my-1">Ubah</button>
+                                @if($canAssignPic)
+                                    <button wire:click="$set('showAssignModal', true)" type="button" class="ui-text-action -my-1">Ubah</button>
+                                @endif
                             </div>
                             <div class="mt-4 space-y-4 text-sm">
                                 <div>
@@ -251,50 +281,86 @@
                             <h2 id="assets-heading" class="ui-section-heading">Objek aset penilaian</h2>
                             <p class="ui-section-description">Data tanah, bangunan, mesin, kendaraan, dan objek lain dalam pekerjaan ini.</p>
                         </div>
-                        <button wire:click="createAsset" type="button" class="ui-btn ui-btn-primary shrink-0">
-                            Tambah objek aset
-                        </button>
+                        @if($canManageAssets)
+                            <button wire:click="createAsset" type="button" class="ui-btn ui-btn-primary shrink-0">
+                                Tambah objek aset
+                            </button>
+                        @endif
                     </div>
 
-                    <div class="ui-table-wrap">
-                        <table class="ui-table">
-                            <caption class="sr-only">Daftar objek aset penilaian untuk pekerjaan {{ $workOrder->contract_no }}</caption>
-                            <thead>
-                                <tr>
-                                    <th scope="col">Jenis aset</th>
-                                    <th scope="col">Alamat lokasi</th>
-                                    <th scope="col">Kota / provinsi</th>
-                                    <th scope="col">Deskripsi</th>
-                                    <th scope="col" class="text-right">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($workOrder->assets as $asset)
-                                    <tr wire:key="asset-{{ $asset->id }}">
-                                        <td class="font-semibold capitalize text-ink">
-                                            {{ str_replace('_', ' ', $asset->asset_type) }}
-                                        </td>
-                                        <td class="max-w-xs font-medium text-ink">{{ $asset->address ?? 'Belum diisi' }}</td>
-                                        <td>{{ $asset->city ?? '-' }}, {{ $asset->province ?? '-' }}</td>
-                                        <td class="max-w-xs text-xs text-ink-muted">{{ $asset->description ?? 'Belum ada deskripsi' }}</td>
-                                        <td class="whitespace-nowrap text-right">
-                                            <button wire:click="editAsset({{ $asset->id }})" type="button" class="ui-text-action" aria-label="Edit aset {{ str_replace('_', ' ', $asset->asset_type) }}">Edit</button>
-                                            <button wire:confirm="Yakin ingin menghapus aset ini?" wire:click="deleteAsset({{ $asset->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus aset {{ str_replace('_', ' ', $asset->asset_type) }}">Hapus</button>
-                                        </td>
-                                    </tr>
-                                @empty
+                    @if($canManageAssets)
+                        <div class="ui-table-wrap">
+                            <table class="ui-table">
+                                <caption class="sr-only">Daftar objek aset penilaian untuk pekerjaan {{ $workOrder->contract_no }}</caption>
+                                <thead>
                                     <tr>
-                                        <td colspan="5" class="h-auto p-0">
-                                            <div class="ui-empty-state">
-                                                <div class="font-medium text-ink">Belum ada objek aset</div>
-                                                <p class="mt-1 text-sm">Tambahkan objek yang akan dinilai pada pekerjaan ini.</p>
-                                            </div>
-                                        </td>
+                                        <th scope="col">Jenis aset</th>
+                                        <th scope="col">Alamat lokasi</th>
+                                        <th scope="col">Kota / provinsi</th>
+                                        <th scope="col">Deskripsi</th>
+                                        <th scope="col" class="text-right">Aksi</th>
                                     </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    @forelse($workOrder->assets as $asset)
+                                        <tr wire:key="asset-{{ $asset->id }}">
+                                            <td class="font-semibold capitalize text-ink">
+                                                {{ str_replace('_', ' ', $asset->asset_type) }}
+                                            </td>
+                                            <td class="max-w-xs font-medium text-ink">{{ $asset->address ?? 'Belum diisi' }}</td>
+                                            <td>{{ $asset->city ?? '-' }}, {{ $asset->province ?? '-' }}</td>
+                                            <td class="max-w-xs text-xs text-ink-muted">{{ $asset->description ?? 'Belum ada deskripsi' }}</td>
+                                            <td class="whitespace-nowrap text-right">
+                                                <button wire:click="editAsset({{ $asset->id }})" type="button" class="ui-text-action" aria-label="Edit aset {{ str_replace('_', ' ', $asset->asset_type) }}">Edit</button>
+                                                <button wire:confirm="Yakin ingin menghapus aset ini?" wire:click="deleteAsset({{ $asset->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus aset {{ str_replace('_', ' ', $asset->asset_type) }}">Hapus</button>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="5" class="h-auto p-0">
+                                                <div class="ui-empty-state">
+                                                    <div class="font-medium text-ink">Belum ada objek aset</div>
+                                                    <p class="mt-1 text-sm">Tambahkan objek yang akan dinilai pada pekerjaan ini.</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div role="note" class="ui-surface-subtle mb-4 border-l-4 border-brand-500 px-4 py-3 text-sm text-ink-secondary">
+                            Data objek aset hanya dapat ditambah atau diubah oleh admin yang membuat penawaran. Jika ada data yang keliru, hubungi admin untuk memperbaikinya.
+                        </div>
+
+                        @forelse($workOrder->assets as $asset)
+                            <details class="ui-surface mb-2 overflow-hidden rounded-ui" wire:key="asset-accordion-{{ $asset->id }}">
+                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                                    <span class="font-semibold capitalize text-ink">{{ str_replace('_', ' ', $asset->asset_type) }}</span>
+                                    <span class="truncate text-xs text-ink-muted">{{ $asset->address ?? 'Alamat belum diisi' }}</span>
+                                </summary>
+                                <dl class="space-y-3 border-t border-line px-4 py-3 text-sm">
+                                    <div>
+                                        <dt class="text-xs text-ink-muted">Alamat lokasi</dt>
+                                        <dd class="mt-0.5 font-medium text-ink">{{ $asset->address ?? 'Belum diisi' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-ink-muted">Kota / provinsi</dt>
+                                        <dd class="mt-0.5 font-medium text-ink">{{ $asset->city ?? '-' }}, {{ $asset->province ?? '-' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-ink-muted">Deskripsi</dt>
+                                        <dd class="mt-0.5 text-ink-secondary">{{ $asset->description ?? 'Belum ada deskripsi' }}</dd>
+                                    </div>
+                                </dl>
+                            </details>
+                        @empty
+                            <div class="ui-empty-state">
+                                <div class="font-medium text-ink">Belum ada objek aset</div>
+                                <p class="mt-1 text-sm">Objek yang akan dinilai akan ditambahkan oleh admin.</p>
+                            </div>
+                        @endforelse
+                    @endif
                 </section>
             @endif
 
@@ -306,9 +372,11 @@
                             <h2 id="reports-heading" class="ui-section-heading">Laporan resmi</h2>
                             <p class="ui-section-description">Nomor laporan, nilai penilaian, tanggal cetak, dan bukti pengiriman.</p>
                         </div>
-                        <button wire:click="createReport" type="button" class="ui-btn ui-btn-primary shrink-0">
-                            Terbitkan laporan
-                        </button>
+                        @if($canReview)
+                            <button wire:click="createReport" type="button" class="ui-btn ui-btn-primary shrink-0">
+                                Terbitkan laporan
+                            </button>
+                        @endif
                     </div>
 
                     <div class="divide-y divide-line">
@@ -323,11 +391,13 @@
                                             {{ $report->purpose }}
                                         </p>
                                     </div>
-                                    <div class="flex flex-wrap items-center gap-1">
-                                        <button wire:click="openDeliveryModal({{ $report->id }})" type="button" class="ui-text-action">Pengiriman</button>
-                                        <button wire:click="editReport({{ $report->id }})" type="button" class="ui-text-action">Edit</button>
-                                        <button wire:confirm="Yakin hapus laporan ini?" wire:click="deleteReport({{ $report->id }})" type="button" class="ui-text-action ui-text-action-danger">Hapus</button>
-                                    </div>
+                                    @if($canReview)
+                                        <div class="flex flex-wrap items-center gap-1">
+                                            <button wire:click="openDeliveryModal({{ $report->id }})" type="button" class="ui-text-action">Pengiriman</button>
+                                            <button wire:click="editReport({{ $report->id }})" type="button" class="ui-text-action">Edit</button>
+                                            <button wire:confirm="Yakin hapus laporan ini?" wire:click="deleteReport({{ $report->id }})" type="button" class="ui-text-action ui-text-action-danger">Hapus</button>
+                                        </div>
+                                    @endif
                                 </div>
 
                                 <dl class="grid grid-cols-1 gap-4 text-xs sm:grid-cols-3">
@@ -374,9 +444,11 @@
                             <h2 id="documents-heading" class="ui-section-heading">Arsip dokumen</h2>
                             <p class="ui-section-description">Berkas penawaran, data survey, draft laporan, dan scan laporan final.</p>
                         </div>
-                        <button wire:click="openDocumentModal" type="button" class="ui-btn ui-btn-primary shrink-0">
-                            Unggah dokumen
-                        </button>
+                        @if($canReview)
+                            <button wire:click="openDocumentModal" type="button" class="ui-btn ui-btn-primary shrink-0">
+                                Unggah dokumen
+                            </button>
+                        @endif
                     </div>
 
                     <div class="ui-table-wrap">
@@ -400,7 +472,9 @@
                                         <td class="whitespace-nowrap text-xs tabular-nums text-ink-muted">{{ $doc->created_at->format('d M Y, H:i') }}</td>
                                         <td class="whitespace-nowrap text-right">
                                             <a href="{{ Storage::url($doc->file_path) }}" target="_blank" rel="noopener" class="ui-text-action" aria-label="Unduh {{ $doc->title }} di tab baru">Unduh</a>
-                                            <button wire:confirm="Hapus dokumen ini dari arsip?" wire:click="deleteDocument({{ $doc->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus {{ $doc->title }}">Hapus</button>
+                                            @if($canReview)
+                                                <button wire:confirm="Hapus dokumen ini dari arsip?" wire:click="deleteDocument({{ $doc->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus {{ $doc->title }}">Hapus</button>
+                                            @endif
                                         </td>
                                     </tr>
                                 @empty
@@ -422,7 +496,7 @@
     </div>
 
     <!-- MODAL FASE 3: ASSET -->
-    @if($showAssetModal)
+    @if($showAssetModal && $canManageAssets)
         <x-modal name="asset-editor" :show="$showAssetModal" close-property="showAssetModal" maxWidth="md" labelledby="asset-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="asset-modal-title" class="ui-modal-title">
@@ -479,7 +553,7 @@
     @endif
 
     <!-- MODAL FASE 3: REPORT -->
-    @if($showReportModal)
+    @if($showReportModal && $canReview)
         <x-modal name="report-editor" :show="$showReportModal" close-property="showReportModal" maxWidth="md" labelledby="report-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="report-modal-title" class="ui-modal-title">
@@ -540,7 +614,7 @@
     @endif
 
     <!-- MODAL FASE 3: DELIVERY -->
-    @if($showDeliveryModal)
+    @if($showDeliveryModal && $canReview)
         <x-modal name="delivery-editor" :show="$showDeliveryModal" close-property="showDeliveryModal" maxWidth="md" labelledby="delivery-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="delivery-modal-title" class="ui-modal-title">Status & resi pengiriman laporan</h2>
@@ -591,7 +665,7 @@
     @endif
 
     <!-- MODAL FASE 3: DOCUMENT UPLOAD -->
-    @if($showDocumentModal)
+    @if($showDocumentModal && $canReview)
         <x-modal name="document-upload" :show="$showDocumentModal" close-property="showDocumentModal" maxWidth="md" labelledby="document-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="document-modal-title" class="ui-modal-title">Unggah dokumen ke arsip</h2>
@@ -638,7 +712,7 @@
     @endif
 
     <!-- MODAL EXISTINGS: STATUS & ASSIGNMENT & SLA -->
-    @if($showStatusModal)
+    @if($showStatusModal && $canChangeStatus)
         <x-modal name="status-editor" :show="$showStatusModal" close-property="showStatusModal" maxWidth="sm" labelledby="status-modal-title" focusable>
                 <div class="ui-modal-header">
                     <div>
@@ -677,7 +751,7 @@
         </x-modal>
     @endif
 
-    @if($showAssignModal)
+    @if($showAssignModal && $canAssignPic)
         <x-modal name="assignment-editor" :show="$showAssignModal" close-property="showAssignModal" maxWidth="sm" labelledby="assignment-modal-title" focusable>
                 <div class="ui-modal-header">
                     <div>
@@ -714,7 +788,7 @@
         </x-modal>
     @endif
 
-    @if($showSlaModal)
+    @if($showSlaModal && $canEditSla)
         <x-modal name="sla-editor" :show="$showSlaModal" close-property="showSlaModal" maxWidth="sm" labelledby="sla-modal-title" focusable>
                 <div class="ui-modal-header">
                     <div>

@@ -133,6 +133,40 @@ class Show extends Component
         $this->workOrder->refresh();
     }
 
+    public function markSurveyComplete(): void
+    {
+        $this->authorize('work-orders.survey');
+        $this->advanceStatus('SURVEY', 'PENGERJAAN', 'Aset selesai disurvey.');
+    }
+
+    public function markReviewComplete(): void
+    {
+        $this->authorize('work-orders.review');
+        $this->advanceStatus('REVIEW', 'CETAK', 'Laporan selesai direview.');
+    }
+
+    private function advanceStatus(string $from, string $to, string $note): void
+    {
+        if ($this->workOrder->current_status !== $from) {
+            session()->flash('error', 'Status pekerjaan sudah berubah; muat ulang halaman lalu coba lagi.');
+
+            return;
+        }
+
+        StatusHistory::create([
+            'work_order_id' => $this->workOrder->id,
+            'from_status' => $from,
+            'to_status' => $to,
+            'changed_by' => Auth::id(),
+            'note' => $note,
+        ]);
+
+        $this->workOrder->update(['current_status' => $to]);
+
+        session()->flash('message', 'Status pekerjaan berhasil diperbarui menjadi ' . $to . '.');
+        $this->workOrder->refresh();
+    }
+
     public function saveSlaConfig(): void
     {
         $this->authorize('work-orders.edit-sla');
@@ -195,7 +229,7 @@ class Show extends Component
 
     public function saveAsset(): void
     {
-        $this->authorize('work-orders.survey');
+        $this->authorize('work-orders.manage-assets');
         $validated = $this->validate([
             'asset_type' => 'required|string',
             'asset_address' => 'nullable|string',
@@ -230,7 +264,7 @@ class Show extends Component
 
     public function deleteAsset(int $id): void
     {
-        $this->authorize('work-orders.survey');
+        $this->authorize('work-orders.manage-assets');
         WorkOrderAsset::findOrFail($id)->delete();
         session()->flash('message', 'Data aset berhasil dihapus.');
         $this->workOrder->refresh();
@@ -422,10 +456,17 @@ class Show extends Component
     {
         $surveyors = User::whereIn('role', ['surveyor', 'admin', 'sysadmin'])->where('active', true)->get();
         $reviewers = User::whereIn('role', ['reviewer', 'admin', 'sysadmin'])->where('active', true)->get();
+        $user = Auth::user();
 
         return view('livewire.work-orders.show', [
             'surveyors' => $surveyors,
             'reviewers' => $reviewers,
+            'canChangeStatus' => $user?->can('work-orders.change-status') === true,
+            'canEditSla' => $user?->can('work-orders.edit-sla') === true,
+            'canAssignPic' => $user?->can('work-orders.assign-pic') === true,
+            'canManageAssets' => $user?->can('work-orders.manage-assets') === true,
+            'canSurvey' => $user?->can('work-orders.survey') === true,
+            'canReview' => $user?->can('work-orders.review') === true,
         ])->layout('layouts.app');
     }
 }

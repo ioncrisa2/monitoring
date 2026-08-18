@@ -3,16 +3,16 @@
 ## Status Dokumen
 
 - Tanggal analisis: 12 Agustus 2026.
-- Status: vertical slice PDF draft telah diterapkan; target produksi dipersempit menjadi PDF siap cetak tanpa tanda tangan/stempel digital.
+- Status: jalur DRAF dan PDF siap cetak telah diterapkan; output resmi tetap terkunci sampai master resmi disetujui.
 - Sumber: tiga PDF penawaran resmi yang diberikan sebagai acuan.
 - Cakupan: pengisian data, validasi, pratinjau DRAF, serta generate dan unduh PDF penawaran siap cetak.
 - Prinsip: format visual dan urutan dokumen mengikuti contoh, sedangkan typo, kontradiksi, redaksi legal, tarif pajak, dan identitas penandatangan harus disetujui pemilik proses sebelum masuk template produksi.
 
-### Keputusan scope final: cetak dan serah-terima fisik
+### Keputusan scope final: generate PDF; serah-terima boleh fisik maupun file
 
-Sistem berhenti ketika PDF siap cetak berhasil dibuat dan diunduh. PDF tidak memuat gambar tanda tangan, gambar stempel, tanda tangan digital/PKI, atau bukti serah-terima digital. Nama, jabatan, dan nomor izin penandatangan boleh tercetak, tetapi area tanda tangan/stempel harus tetap kosong.
+Sistem berhenti ketika PDF siap cetak berhasil dibuat dan diunduh. PDF tidak memuat gambar tanda tangan, gambar stempel, tanda tangan digital/PKI, atau bukti serah-terima digital. Nama, jabatan, dan nomor izin penandatangan boleh tercetak, tetapi area tanda tangan/stempel pada file itu sendiri harus tetap kosong.
 
-Alur operasionalnya:
+Setelah diunduh, ada dua jalur serah-terima yang sama-sama sah dan sama-sama berlangsung di luar aplikasi:
 
 ```text
 Isi data penawaran
@@ -21,14 +21,11 @@ Validasi dan pratinjau DRAF
         ↓
 Generate/unduh PDF siap cetak tanpa watermark
         ↓
-Cetak dokumen
-        ↓
-Tanda tangan dan stempel basah
-        ↓
-Serahkan dokumen fisik kepada client
+        ├── Cetak dokumen → tanda tangan dan stempel basah → serahkan dokumen fisik kepada client
+        └── Serahkan langsung file PDF (tanpa ttd/stempel) kepada client
 ```
 
-Empat langkah terakhir setelah pengunduhan berlangsung di luar aplikasi. Outcome `DIKIRIM` tetap boleh dicatat manual pada Penawaran sebagai status bisnis, bukan sebagai bukti bahwa sistem mengirim file secara digital.
+Kedua jalur setelah pengunduhan berlangsung di luar aplikasi: sistem tidak mengirim file secara otomatis (tidak ada fitur email/WhatsApp bawaan). Jika jalur file yang dipilih, operator yang mengunduh PDF siap cetak lalu meneruskannya secara manual ke client. Outcome `DIKIRIM` tetap boleh dicatat manual pada Penawaran sebagai status bisnis, bukan sebagai bukti bahwa sistem mengirim file secara digital.
 
 ### Status implementasi per 12 Agustus 2026
 
@@ -38,9 +35,12 @@ Sudah diterapkan dan dapat diuji:
 - Nomor Penawaran dialokasikan server-side secara atomik, global per tahun. Nilai pada form hanya pratinjau; nomor, tanggal, dan cabang terkunci setelah alokasi. Nomor legacy yang valid dapat diadopsi ke ledger tanpa diubah.
 - Kalkulator fee/pajak integer Rupiah untuk mode `included`, `excluded`, dan `non_taxable`, pembulatan termin, serta terbilang Bahasa Indonesia.
 - Editor dokumen terpisah untuk penerima, referensi, lingkup, banyak pihak/aset, banyak dokumen per aset, fee, pajak, termin, persyaratan, asumsi, dan catatan internal.
-- Penyimpanan draft transactional, scope ID nested terhadap Offer/cabang, optimistic `lock_version`, batas jumlah/nilai input, snapshot deterministik, dan preflight mode draft/review/final.
+- Penyimpanan draft transactional, scope ID nested terhadap Offer/cabang, optimistic `lock_version`, batas jumlah/nilai input, snapshot deterministik, dan preflight mode `draft`/`print_ready`.
 - Preview serta unduh PDF draft A4 melalui Dompdf dengan 25 klausul terurut, watermark `DRAF`, kop teks pada halaman ganjil, escaping output, throttle, audit log, dan policy cabang. Remote asset, PHP, JavaScript, gambar tanda tangan, serta gambar stempel dinonaktifkan.
 - Renderer memakai kontrak workflow `physical_print`: blok penandatanganan hanya berisi identitas teks dan ruang kosong untuk tanda tangan/stempel basah.
+- Mode `print_ready` telah tersedia melalui endpoint terpisah. Mode ini menghilangkan watermark, memakai filename tanpa suffix `-draft`, tidak menyimpan artifact, dan mencatat aktivitas `GENERATE_PRINT_READY`.
+- Strict preflight print-ready mewajibkan nomor teralokasi, template aktif/approved dengan tepat 25 klausul, profil penerbit dan identitas penandatangan approved sesuai cabang/tanggal, metadata approval, checksum kanonik yang diverifikasi ulang terhadap isi, kota penerima, dokumen kepemilikan lengkap, fee/termin valid, serta bebas marker provisional.
+- Editor hanya menampilkan master approved yang aktif, berlaku, dan lolos verifikasi integritas. Link unduh siap cetak baru terlihat setelah pemeriksaan strict berhasil; endpoint tetap mengulang seluruh pemeriksaan untuk mencegah bypass/tampering.
 
 Keputusan kompatibilitas sementara:
 
@@ -51,9 +51,17 @@ Keputusan kompatibilitas sementara:
 Belum boleh dianggap siap produksi final:
 
 - Redaksi legal 25 klausul, profile penerbit, letterhead/logo resolusi tinggi, font, identitas penandatangan, tarif pajak, aturan nomor/suffix/void, dan role pembuat PDF belum disetujui.
-- Tombol generate PDF siap cetak tanpa watermark belum diaktifkan agar dokumen provisional tidak keliru diserahkan kepada client.
-- Golden visual yang membuktikan fixture A/C tepat 5 halaman dan B tepat 13 halaman belum tersedia; renderer saat ini adalah spike draft aman, bukan baseline visual final.
+- Database lokal belum memiliki template, profil penerbit, dan identitas penandatangan resmi. Karena itu action siap cetak sudah tersedia tetapi akan tetap terkunci/merespons `422` sampai master tersebut diisi dan disetujui.
+- Golden visual yang membuktikan fixture A/C tepat 5 halaman dan B tepat 13 halaman belum tersedia; mode siap cetak sudah aman secara kontrak tetapi belum menjadi baseline visual/legal final.
 - Uji 20 request nomor paralel serta migration portability masih perlu dijalankan pada database produksi target (MySQL/PostgreSQL), bukan hanya SQLite test.
+
+Data resmi yang harus tersedia sebelum action siap cetak dapat digunakan:
+
+- satu versi template aktif berisi opening, closing, dan tepat 25 klausul yang sudah disetujui;
+- satu profil penerbit approved untuk cabang Penawaran, termasuk nama legal, alamat, kota, dan kontak;
+- satu identitas penandatangan approved untuk cabang Penawaran, termasuk nama, jabatan, serta nomor izin/registrasi bila berlaku;
+- tanggal berlaku pada setiap master; checksum SHA-256 kanonik, user penyetuju, dan waktu persetujuan dihasilkan oleh layanan approval aplikasi, bukan diisi manual;
+- keputusan apakah kop teks sementara diterima atau harus menunggu aset logo/letterhead resmi.
 
 Langkah deploy lokal setelah perubahan ini:
 
@@ -79,7 +87,7 @@ Pratinjau dokumen
 Buat dan unduh PDF siap cetak
 ```
 
-Target akhirnya adalah pengguna tidak lagi menyusun surat di Word secara manual. Data hanya dimasukkan satu kali, kemudian sistem menghasilkan dokumen penawaran dengan format KJPP yang konsisten. Pencetakan, tanda tangan/stempel basah, dan serah-terima fisik dilakukan di luar aplikasi.
+Target akhirnya adalah pengguna tidak lagi menyusun surat di Word secara manual. Data hanya dimasukkan satu kali, kemudian sistem menghasilkan dokumen penawaran dengan format KJPP yang konsisten. Pencetakan, tanda tangan/stempel basah, dan serah-terima (baik dokumen fisik maupun file PDF) dilakukan di luar aplikasi.
 
 ## 2. Sumber Acuan yang Dianalisis
 
@@ -641,8 +649,9 @@ Snapshot dibangun setiap kali pengguna meminta preview atau PDF siap cetak. Snap
 - profil penerbit;
 - profil penandatangan;
 - identitas aset letterhead/logo yang dipakai;
-- versi renderer;
-- mode output dan user pembuat PDF.
+- versi/profile renderer.
+
+Mode output dipilih server-side ketika renderer dipanggil dan tidak dipercaya dari snapshot/client. User pembuat PDF dicatat pada activity log, bukan disisipkan ke isi snapshot dokumen.
 
 Aturan:
 
@@ -864,6 +873,7 @@ Route binary menggunakan controller agar authorization dan response header dapat
 ```text
 offers.documents.preview
 offers.documents.download
+offers.documents.print-ready
 ```
 
 Livewire menangani editor dan command UI, sedangkan service menangani domain operation.
@@ -873,11 +883,12 @@ Permission baru yang disarankan:
 - `offers.documents.view`.
 - `offers.documents.manage`.
 - `offers.documents.generate-draft`.
-- `offers.templates.manage`.
-- `offers.issuer-profiles.manage`.
+- `offers.documents.generate-print-ready`.
 - `offers.cross-branch`.
 
-Mapping role harus diputuskan eksplisit. Permission `menu.offers` tidak cukup untuk membuat atau mengunduh PDF.
+Mapping awal dibuat konservatif: sysadmin dan supervisor mendapat `offers.documents.generate-print-ready`; admin tetap hanya membuat DRAF sampai permission diberikan eksplisit. Permission `menu.offers` tidak cukup untuk membuat atau mengunduh PDF.
+
+Permission/UI operasional untuk membuat dan menyetujui master template, profil penerbit, serta identitas penandatangan belum diaktifkan pada slice ini. Lapisan domain approval sudah tersedia: ia memvalidasi isi, menghitung checksum kanonik, mencatat penyetuju/waktu secara atomik, dan mengunci versi approved dari perubahan/penghapusan. Sampai UI master tersedia, data resmi tidak boleh dibuat melalui seeder contoh atau ditandai approved lewat akses database manual.
 
 ### 15.1 Policy dan branch scope
 
@@ -1051,6 +1062,8 @@ Gate: visual sign-off pada fixture simple dan bulk.
 - Blok tanda tangan/stempel basah tetap kosong.
 - Policy generate/download dan audit log.
 
+Status implementasi: mekanisme, permission, checksum/approval guard, selector master, endpoint, UI, dan regression test telah selesai. Aktivasi operasional menunggu master resmi, UI pengelolaan master, serta UAT visual/cetak.
+
 Gate: security test, kontrak tanpa signature/stamp digital, dan hasil cetak fisik lulus UAT.
 
 ### Fase 6 — Integrasi WorkOrder
@@ -1066,7 +1079,7 @@ Gate: satu Offer menghasilkan maksimal satu WorkOrder dan satu initial history.
 ### Fase 7 — UAT dan rollout
 
 - UAT tiga skenario tersanitasi.
-- Cetak fisik dan approval legal/operasional.
+- Cetak fisik maupun serah-terima file PDF, dan approval legal/operasional.
 - Backfill data existing sebagai legacy.
 - Dokumentasi pengguna.
 - Monitoring error render dan storage.
@@ -1137,7 +1150,7 @@ Sebelum coding dimulai, pemilik proses perlu menjawab:
 - Gambar tanda tangan/stempel pada PDF.
 - Upload atau arsip signed scan.
 - Penyimpanan/versioning artifact PDF oleh aplikasi.
-- Pengiriman PDF melalui email/aplikasi.
+- Pengiriman PDF otomatis oleh aplikasi (integrasi email/WhatsApp/API); operator tetap boleh mengunduh PDF siap cetak lalu meneruskannya secara manual ke client di luar sistem.
 - Pengiriman WhatsApp otomatis.
 - Portal persetujuan klien.
 - Editor bebas seperti Microsoft Word.

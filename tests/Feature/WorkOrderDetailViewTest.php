@@ -68,10 +68,179 @@ class WorkOrderDetailViewTest extends TestCase
             ->assertSee('Atur SLA & survey', escape: false);
     }
 
-    private function createWorkOrder(User $user): WorkOrder
+    public function test_surveyor_only_sees_survey_actions_not_sla_pic_status_review_or_asset_management_controls(): void
     {
+        $surveyor = User::factory()->create(['role' => 'surveyor']);
+        $workOrder = $this->createWorkOrder($surveyor);
+
+        $component = Livewire::actingAs($surveyor)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->assertDontSee('Atur SLA & survey', escape: false)
+            ->assertDontSee('Atur PIC')
+            ->set('activeTab', 'assets')
+            ->assertDontSeeHtml('wire:click="createAsset"')
+            ->assertSee('hanya dapat ditambah atau diubah oleh admin')
+            ->set('activeTab', 'reports')
+            ->assertDontSeeHtml('wire:click="createReport"')
+            ->set('activeTab', 'documents')
+            ->assertDontSeeHtml('wire:click="openDocumentModal"');
+
+        // The "Ubah" shortcuts and status stepper must not open forms the surveyor cannot submit.
+        $component->set('showSlaModal', true)->assertDontSee('Membutuhkan survey lapangan');
+        $component->set('showAssignModal', true)->assertDontSee('Pilih surveyor');
+        $component->set('showStatusModal', true)->assertDontSee('Status baru');
+
+        $this->assertFalse($surveyor->can('work-orders.edit-sla'));
+        $this->assertFalse($surveyor->can('work-orders.assign-pic'));
+        $this->assertFalse($surveyor->can('work-orders.change-status'));
+        $this->assertFalse($surveyor->can('work-orders.review'));
+        $this->assertFalse($surveyor->can('work-orders.manage-assets'));
+        $this->assertTrue($surveyor->can('work-orders.survey'));
+    }
+
+    public function test_reviewer_cannot_manage_assets_either(): void
+    {
+        $reviewer = User::factory()->create(['role' => 'reviewer']);
+        $workOrder = $this->createWorkOrder($reviewer);
+
+        Livewire::actingAs($reviewer)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->set('activeTab', 'assets')
+            ->assertDontSeeHtml('wire:click="createAsset"')
+            ->assertSee('hanya dapat ditambah atau diubah oleh admin')
+            ->call('saveAsset')
+            ->assertForbidden();
+
+        $this->assertFalse($reviewer->can('work-orders.manage-assets'));
+    }
+
+    public function test_surveyor_sees_asset_data_read_only_in_an_accordion(): void
+    {
+        $surveyor = User::factory()->create(['role' => 'surveyor']);
+        $workOrder = $this->createWorkOrder($surveyor);
+        $workOrder->assets()->create([
+            'asset_type' => 'tanah_bangunan',
+            'address' => 'Jl. Contoh No. 1',
+            'city' => 'Jakarta',
+            'province' => 'DKI Jakarta',
+            'description' => 'Rumah tinggal dua lantai',
+        ]);
+
+        Livewire::actingAs($surveyor)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->set('activeTab', 'assets')
+            ->assertSeeHtml('<details')
+            ->assertSee('Jl. Contoh No. 1')
+            ->assertSee('Rumah tinggal dua lantai')
+            ->assertDontSeeHtml('wire:click="editAsset(');
+    }
+
+    public function test_supervisor_still_sees_all_management_controls(): void
+    {
+        $supervisor = User::factory()->create(['role' => 'supervisor']);
+        $workOrder = $this->createWorkOrder($supervisor);
+
+        Livewire::actingAs($supervisor)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->assertSee('Atur SLA & survey', escape: false)
+            ->assertSee('Atur PIC')
+            ->set('activeTab', 'assets')
+            ->assertSee('Tambah objek aset')
+            ->set('activeTab', 'reports')
+            ->assertSee('Terbitkan laporan')
+            ->set('activeTab', 'documents')
+            ->assertSee('Unggah dokumen');
+    }
+
+    public function test_admin_who_creates_offers_can_manage_assets(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $workOrder = $this->createWorkOrder($admin);
+
+        Livewire::actingAs($admin)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->set('activeTab', 'assets')
+            ->assertSee('Tambah objek aset');
+
+        $this->assertTrue($admin->can('work-orders.manage-assets'));
+    }
+
+    public function test_surveyor_can_mark_survey_complete_and_advance_to_pengerjaan(): void
+    {
+        $surveyor = User::factory()->create(['role' => 'surveyor']);
+        $workOrder = $this->createWorkOrder($surveyor, 'SURVEY');
+
+        Livewire::actingAs($surveyor)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->assertSeeHtml('wire:click="markSurveyComplete"')
+            ->call('markSurveyComplete')
+            ->assertSet('workOrder.current_status', 'PENGERJAAN');
+
+        $this->assertSame('PENGERJAAN', $workOrder->fresh()->current_status);
+        $this->assertDatabaseHas('status_histories', [
+            'work_order_id' => $workOrder->id,
+            'from_status' => 'SURVEY',
+            'to_status' => 'PENGERJAAN',
+            'changed_by' => $surveyor->id,
+        ]);
+    }
+
+    public function test_reviewer_can_mark_review_complete_and_advance_to_cetak(): void
+    {
+        $reviewer = User::factory()->create(['role' => 'reviewer']);
+        $workOrder = $this->createWorkOrder($reviewer, 'REVIEW');
+
+        Livewire::actingAs($reviewer)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->assertSeeHtml('wire:click="markReviewComplete"')
+            ->call('markReviewComplete')
+            ->assertSet('workOrder.current_status', 'CETAK');
+
+        $this->assertSame('CETAK', $workOrder->fresh()->current_status);
+        $this->assertDatabaseHas('status_histories', [
+            'work_order_id' => $workOrder->id,
+            'from_status' => 'REVIEW',
+            'to_status' => 'CETAK',
+            'changed_by' => $reviewer->id,
+        ]);
+    }
+
+    public function test_mark_complete_buttons_are_scoped_to_the_matching_role_and_stage(): void
+    {
+        $surveyor = User::factory()->create(['role' => 'surveyor']);
+        $reviewer = User::factory()->create(['role' => 'reviewer']);
+
+        // Surveyor lacks work-orders.review, so they cannot mark a review-stage job complete.
+        $reviewStageOrder = $this->createWorkOrder($surveyor, 'REVIEW');
+        Livewire::actingAs($surveyor)
+            ->test(Show::class, ['id' => $reviewStageOrder->id])
+            ->assertDontSeeHtml('wire:click="markReviewComplete"')
+            ->call('markReviewComplete')
+            ->assertForbidden();
+
+        // Reviewer lacks work-orders.survey, so they cannot mark a survey-stage job complete.
+        $surveyStageOrder = $this->createWorkOrder($reviewer, 'SURVEY');
+        Livewire::actingAs($reviewer)
+            ->test(Show::class, ['id' => $surveyStageOrder->id])
+            ->assertDontSeeHtml('wire:click="markSurveyComplete"')
+            ->call('markSurveyComplete')
+            ->assertForbidden();
+
+        // The surveyor button only appears while the job is actually at the Survey stage.
+        $persiapanOrder = $this->createWorkOrder($surveyor, 'PERSIAPAN');
+        Livewire::actingAs($surveyor)
+            ->test(Show::class, ['id' => $persiapanOrder->id])
+            ->assertDontSeeHtml('wire:click="markSurveyComplete"');
+    }
+
+    private static int $workOrderSequence = 0;
+
+    private function createWorkOrder(User $user, string $status = 'PERSIAPAN'): WorkOrder
+    {
+        $sequence = ++static::$workOrderSequence;
+
         $branch = Branch::create([
-            'code' => 'JKT',
+            'code' => 'JKT'.$sequence,
             'name' => 'Kantor Pusat Jakarta',
             'active' => true,
         ]);
@@ -86,8 +255,8 @@ class WorkOrderDetailViewTest extends TestCase
         ]);
 
         $offer = Offer::create([
-            'offer_no' => '1/S.Kontrak/KJPP-HJA/R/0/VIII/2026',
-            'sequence_no' => 1,
+            'offer_no' => "{$sequence}/S.Kontrak/KJPP-HJA/R/0/VIII/2026",
+            'sequence_no' => $sequence,
             'offer_date' => '2026-08-12',
             'branch_id' => $branch->id,
             'debtor_id' => $debtor->id,
@@ -106,7 +275,7 @@ class WorkOrderDetailViewTest extends TestCase
             'contract_date' => '2026-08-12',
             'survey_required' => true,
             'sla_date' => '2026-08-26',
-            'current_status' => 'PERSIAPAN',
+            'current_status' => $status,
             'started_at' => now(),
         ]);
     }

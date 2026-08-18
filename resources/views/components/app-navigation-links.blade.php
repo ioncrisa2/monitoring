@@ -40,7 +40,7 @@
         @endcan
     </div>
 
-    @canany(['menu.master-data', 'menu.master-users', 'menu.audit-logs'])
+    @canany(['menu.master-data', 'menu.master-users', 'users.manage', 'menu.audit-logs'])
         <div class="space-y-1">
             <div class="ui-nav-section-label">Administrasi</div>
 
@@ -56,7 +56,9 @@
                     <x-navigation-icon name="users" />
                     <span>Pengguna</span>
                 </x-sidebar-link>
+            @endcan
 
+            @can('users.manage')
                 <x-sidebar-link :href="route('master.roles-permissions')" wire:navigate :active="request()->routeIs('master.roles-permissions')">
                     <x-navigation-icon name="permissions" />
                     <span>Peran & Hak Akses</span>

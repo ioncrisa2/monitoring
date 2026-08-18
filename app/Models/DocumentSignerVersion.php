@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasImmutableOfferDocumentApproval;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DocumentSignerVersion extends Model
 {
+    use HasImmutableOfferDocumentApproval;
+
     protected $hidden = [
         'signature_path',
         'signature_sha256',
@@ -31,7 +34,6 @@ class DocumentSignerVersion extends Model
         'effective_from',
         'effective_until',
         'status',
-        'checksum',
         'approved_by',
         'approved_at',
     ];

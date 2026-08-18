@@ -29,10 +29,6 @@
             </div>
         </header>
 
-        <div class="ui-surface-subtle border-l-4 border-brand-500 px-4 py-3 text-sm text-ink-secondary" role="note">
-            Cakupan fitur ini adalah PDF siap cetak tanpa tanda tangan/stempel digital. Output yang tersedia saat ini masih DRAF; PDF resmi akan diaktifkan setelah template dan profil penerbit disetujui. Setelah itu dokumen dicetak, ditandatangani dan distempel manual, lalu diserahkan kepada client.
-        </div>
-
         @if(session()->has('message'))
             <x-flash-message>{{ session('message') }}</x-flash-message>
         @endif
@@ -64,6 +60,43 @@
             <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
                 <fieldset class="min-w-0 space-y-10" @disabled(!$canManage)>
                     <legend class="sr-only">Data draft dokumen penawaran</legend>
+
+                    <section aria-labelledby="document-master-heading">
+                        <div class="mb-4">
+                            <h2 id="document-master-heading" class="ui-section-heading">Master dokumen resmi</h2>
+                            <p class="ui-section-description">Hanya versi approved, aktif, dan berlaku pada tanggal penawaran yang dapat dipilih.</p>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-3">
+                            <div>
+                                <x-input-label for="document-template-version" value="Template penawaran" />
+                                <x-select-input id="document-template-version" wire:model="draft.engagement.template_version_id" class="mt-1">
+                                    <option value="">Pilih template approved</option>
+                                    @foreach($templateVersions as $version)
+                                        <option value="{{ $version->id }}">{{ $version->template?->name }} — v{{ $version->version_no }}</option>
+                                    @endforeach
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-issuer-profile" value="Profil penerbit" />
+                                <x-select-input id="document-issuer-profile" wire:model="draft.engagement.issuer_profile_version_id" class="mt-1">
+                                    <option value="">Pilih profil approved</option>
+                                    @foreach($issuerProfiles as $profile)
+                                        <option value="{{ $profile->id }}">{{ $profile->legal_name }} — v{{ $profile->version_no }}</option>
+                                    @endforeach
+                                </x-select-input>
+                            </div>
+                            <div>
+                                <x-input-label for="document-signer-version" value="Penandatangan" />
+                                <x-select-input id="document-signer-version" wire:model="draft.engagement.signer_version_id" class="mt-1">
+                                    <option value="">Pilih penandatangan approved</option>
+                                    @foreach($signerVersions as $signer)
+                                        <option value="{{ $signer->id }}">{{ $signer->full_name }} — {{ $signer->position }}</option>
+                                    @endforeach
+                                </x-select-input>
+                            </div>
+                        </div>
+                    </section>
 
                     <section aria-labelledby="document-recipient-heading">
                         <div class="mb-4">
@@ -117,6 +150,7 @@
                             <div class="md:col-span-2">
                                 <x-input-label for="document-opening-context" value="Konteks pembuka (opsional)" />
                                 <x-textarea-input id="document-opening-context" wire:model="draft.engagement.opening_context" rows="3" class="mt-1" placeholder="Keterangan tambahan tentang permintaan penilaian"></x-textarea-input>
+                                <p class="ui-help">Hanya digunakan pada DRAF. PDF siap cetak selalu memakai pembuka dari template approved.</p>
                             </div>
                         </div>
                     </section>
@@ -498,7 +532,9 @@
                     <section class="ui-surface p-5" aria-labelledby="document-preflight-heading">
                         <div class="flex items-center justify-between gap-3">
                             <h2 id="document-preflight-heading" class="ui-section-heading">Preflight</h2>
-                            @if($preflight['errors'] === [] && $preflight['warnings'] === [])
+                            @if($printReadyEligible)
+                                <span class="ui-badge ui-badge-success">Siap dicetak</span>
+                            @elseif($preflight['errors'] === [] && $preflight['warnings'] === [])
                                 <span class="ui-badge ui-badge-neutral">Belum diperiksa</span>
                             @elseif($preflight['errors'] === [])
                                 <span class="ui-badge ui-badge-success">Lolos</span>
@@ -553,6 +589,21 @@
                                 <a href="{{ route('offers.documents.download', $offer) }}" class="ui-btn ui-btn-secondary w-full">Unduh PDF draft</a>
                             @else
                                 <p class="ui-help text-center">Renderer PDF belum tersedia.</p>
+                            @endif
+                        @endif
+
+                        @if($canGeneratePrintReady)
+                            <x-secondary-button type="button" wire:click="checkPrintReady" wire:loading.attr="disabled" wire:target="checkPrintReady" class="w-full">
+                                <span wire:loading.remove wire:target="checkPrintReady">Periksa PDF siap cetak</span>
+                                <span wire:loading wire:target="checkPrintReady">Memeriksa…</span>
+                            </x-secondary-button>
+
+                            @if($printReadyEligible && $printReadyRouteReady)
+                                <a href="{{ route('offers.documents.print-ready', $offer) }}" class="ui-btn ui-btn-primary w-full">Unduh PDF siap cetak</a>
+                            @elseif(!$printReadyRouteReady)
+                                <p class="ui-help text-center">Endpoint PDF siap cetak belum tersedia.</p>
+                            @else
+                                <p class="ui-help text-center">Simpan data lalu jalankan pemeriksaan siap cetak. Tombol unduh hanya muncul setelah semua guard resmi lulus.</p>
                             @endif
                         @endif
                     </div>

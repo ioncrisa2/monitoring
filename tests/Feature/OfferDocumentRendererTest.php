@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\OfferDocumentOutputMode;
 use App\Models\DocumentSignerVersion;
+use App\Services\Offers\OfferDocumentContentGuard;
 use App\Services\Offers\OfferDocumentRenderer;
 use InvalidArgumentException;
 use LogicException;
@@ -60,9 +62,58 @@ class OfferDocumentRendererTest extends TestCase
         $this->assertStringNotContainsString('/AcroForm', $pdf);
     }
 
+    public function test_print_ready_removes_only_the_draft_watermark_from_approved_content(): void
+    {
+        $snapshot = $this->approvedSnapshot();
+        $renderer = app(OfferDocumentRenderer::class);
+
+        $draftHtml = $renderer->renderHtml($snapshot);
+        $printReadyHtml = $renderer->renderHtml($snapshot, OfferDocumentOutputMode::PrintReady);
+
+        $this->assertStringContainsString('class="draft-watermark"', $draftHtml);
+        $this->assertStringContainsString('BELUM DISETUJUI', $draftHtml);
+        $this->assertStringNotContainsString('class="draft-watermark"', $printReadyHtml);
+        $this->assertStringNotContainsString('BELUM DISETUJUI', $printReadyHtml);
+        $this->assertStringContainsString('Redaksi resmi klausul 1.', $printReadyHtml);
+        $this->assertStringContainsString('Penandatangan Contoh', $printReadyHtml);
+        $this->assertStringContainsString('Izin Penilai: IZIN-001', $printReadyHtml);
+        $this->assertStringContainsString('Registrasi: REG-001', $printReadyHtml);
+
+        $draftWithoutWatermark = preg_replace(
+            '/\s*<div class="draft-watermark">.*?<\/div>\s*/s',
+            '',
+            $draftHtml,
+        );
+        $normalize = static function (string $html): string {
+            $html = preg_replace('/\s+/', ' ', trim($html)) ?? '';
+
+            return preg_replace('/>\s+</', '><', $html) ?? '';
+        };
+
+        $this->assertSame($normalize((string) $draftWithoutWatermark), $normalize($printReadyHtml));
+    }
+
+    public function test_print_ready_pdf_is_a4_and_contains_no_digital_signature_objects(): void
+    {
+        $pdf = app(OfferDocumentRenderer::class)->render(
+            $this->approvedSnapshot(),
+            OfferDocumentOutputMode::PrintReady,
+        );
+
+        $this->assertStringStartsWith('%PDF-', $pdf);
+        $this->assertMatchesRegularExpression(
+            '/\/MediaBox\s*\[\s*0(?:\.0+)?\s+0(?:\.0+)?\s+595\.28\d*\s+841\.89\d*\s*\]/',
+            $pdf,
+        );
+
+        foreach (['/Type /Sig', '/SigFlags', '/ByteRange', '/DocMDP', '/AcroForm'] as $forbidden) {
+            $this->assertStringNotContainsString($forbidden, $pdf);
+        }
+    }
+
     public function test_signature_block_is_for_wet_ink_and_rejects_embedded_signature_assets(): void
     {
-        $snapshot = $this->draftSnapshot();
+        $snapshot = $this->approvedSnapshot();
         $snapshot['signatures'] += [
             'signature_path' => 'SIGNATURE_PATH_SENTINEL',
             'signature_url' => 'https://example.test/signature.png',
@@ -72,20 +123,22 @@ class OfferDocumentRendererTest extends TestCase
             'stamp_data_uri' => 'data:image/png;base64,STAMP_DATA_SENTINEL',
         ];
 
-        $html = app(OfferDocumentRenderer::class)->renderHtml($snapshot);
+        foreach ([OfferDocumentOutputMode::Draft, OfferDocumentOutputMode::PrintReady] as $mode) {
+            $html = app(OfferDocumentRenderer::class)->renderHtml($snapshot, $mode);
 
-        preg_match('/<table class="signatures".*?<\/table>/s', $html, $matches);
-        $block = $matches[0] ?? '';
+            preg_match('/<table class="signatures".*?<\/table>/s', $html, $matches);
+            $block = $matches[0] ?? '';
 
-        $this->assertStringContainsString('data-signing-mode="wet-ink"', $block);
-        $this->assertStringContainsString('Hormat kami', $block);
-        $this->assertStringContainsString('Menyetujui', $block);
-        $this->assertStringContainsString('Penandatangan Contoh', $block);
-        $this->assertStringContainsString('Nama jelas dan tanda tangan basah', $block);
-        $this->assertStringContainsString('class="signature-space"', $block);
+            $this->assertStringContainsString('data-signing-mode="wet-ink"', $block);
+            $this->assertStringContainsString('Hormat kami', $block);
+            $this->assertStringContainsString('Menyetujui', $block);
+            $this->assertStringContainsString('Penandatangan Contoh', $block);
+            $this->assertStringContainsString('Nama jelas dan tanda tangan basah', $block);
+            $this->assertStringContainsString('class="signature-space"', $block);
 
-        foreach (['<img', '<svg', '<object', '<embed', 'data:image', 'http://', 'https://', 'file://', 'url(', 'SIGNATURE_', 'STAMP_'] as $forbidden) {
-            $this->assertStringNotContainsString($forbidden, $block);
+            foreach (['<img', '<svg', '<object', '<embed', 'data:image', 'http://', 'https://', 'file://', 'url(', 'SIGNATURE_', 'STAMP_'] as $forbidden) {
+                $this->assertStringNotContainsString($forbidden, $block);
+            }
         }
 
         $this->assertFalse(config('offer-documents.output.embedded_signature'));
@@ -103,6 +156,14 @@ class OfferDocumentRendererTest extends TestCase
         $this->expectExceptionMessage('hanya mendukung PDF tanpa tanda tangan/stempel digital');
 
         app(OfferDocumentRenderer::class)->renderHtml($this->draftSnapshot());
+    }
+
+    public function test_provisional_marker_guard_does_not_reject_an_ordinary_legal_use_of_the_word_draft(): void
+    {
+        $this->assertTrue(OfferDocumentContentGuard::containsProvisionalMarker('[DRAF] Belum lengkap'));
+        $this->assertTrue(OfferDocumentContentGuard::containsProvisionalMarker('DRAF — Belum disetujui'));
+        $this->assertTrue(OfferDocumentContentGuard::containsProvisionalMarker('DRAF/001'));
+        $this->assertFalse(OfferDocumentContentGuard::containsProvisionalMarker('Reviewer memeriksa draft laporan sebelum final.'));
     }
 
     public function test_signer_model_exposes_identity_but_not_signature_or_stamp_assets(): void
@@ -128,6 +189,17 @@ class OfferDocumentRendererTest extends TestCase
         $this->expectExceptionMessage('tepat 25 klausul terurut');
 
         app(OfferDocumentRenderer::class)->renderHtml($snapshot);
+    }
+
+    public function test_print_ready_rejects_provisional_snapshot_metadata(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('memerlukan nomor, template, profil penerbit, dan penandatangan resmi');
+
+        app(OfferDocumentRenderer::class)->renderHtml(
+            $this->draftSnapshot(),
+            OfferDocumentOutputMode::PrintReady,
+        );
     }
 
     public function test_provisional_copy_is_complete_and_clearly_marked_as_draft(): void
@@ -205,5 +277,55 @@ class OfferDocumentRendererTest extends TestCase
                 'client_title' => 'Direktur',
             ],
         ];
+    }
+
+    private function approvedSnapshot(): array
+    {
+        $snapshot = $this->draftSnapshot();
+        $snapshot['document']['number'] = "001/S.Kontrak/KJPP-HJA'R/VIII/2026";
+        $snapshot['document']['opening'] = 'Pembuka penawaran yang telah disetujui.';
+        $snapshot['document']['closing'] = 'Penutup penawaran yang telah disetujui.';
+        $snapshot['signatures']['issuer_permit_no'] = 'IZIN-001';
+        $snapshot['signatures']['issuer_registration_no'] = 'REG-001';
+
+        foreach ($snapshot['clauses'] as $index => &$clause) {
+            $clause['paragraphs'] = ['Redaksi resmi klausul '.($index + 1).'.'];
+            $clause['items'] = [];
+        }
+        unset($clause);
+
+        $snapshot['metadata'] = [
+            'number_allocation' => ['status' => 'allocated'],
+            'template' => [
+                'status' => 'approved',
+                'template_active' => true,
+                'approved_by' => 1,
+                'approved_at' => '2026-08-12T09:00:00+07:00',
+                'checksum' => str_repeat('a', 64),
+                'is_effective' => true,
+                'integrity_valid' => true,
+                'schema_valid' => true,
+            ],
+            'issuer_profile' => [
+                'status' => 'approved',
+                'approved_by' => 1,
+                'approved_at' => '2026-08-12T09:00:00+07:00',
+                'checksum' => str_repeat('b', 64),
+                'is_effective' => true,
+                'integrity_valid' => true,
+            ],
+            'signer' => [
+                'status' => 'approved',
+                'approved_by' => 1,
+                'approved_at' => '2026-08-12T09:00:00+07:00',
+                'checksum' => str_repeat('c', 64),
+                'is_effective' => true,
+                'integrity_valid' => true,
+            ],
+            'uses_provisional_copy' => false,
+            'uses_provisional_issuer' => false,
+        ];
+
+        return $snapshot;
     }
 }

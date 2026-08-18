@@ -6,7 +6,9 @@
     <style>{!! $printCss !!}</style>
 </head>
 <body>
-    <div class="draft-watermark">DRAF — BELUM DISETUJUI</div>
+    @if($showDraftWatermark)
+        <div class="draft-watermark">DRAF — BELUM DISETUJUI</div>
+    @endif
 
     <main>
         @include('pdf.offers.partials.letter-meta')

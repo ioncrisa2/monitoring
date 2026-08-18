@@ -8,9 +8,13 @@ class OfferPreflightValidator
 {
     public const MODE_DRAFT = 'draft';
 
-    public const MODE_REVIEW = 'review';
+    public const MODE_PRINT_READY = 'print_ready';
 
-    public const MODE_FINAL = 'final';
+    /** @deprecated Use MODE_PRINT_READY. */
+    public const MODE_REVIEW = self::MODE_PRINT_READY;
+
+    /** @deprecated Use MODE_PRINT_READY. */
+    public const MODE_FINAL = self::MODE_PRINT_READY;
 
     /**
      * @param  array<string, mixed>  $snapshot
@@ -18,7 +22,7 @@ class OfferPreflightValidator
      */
     public function validate(array $snapshot, string $mode = self::MODE_DRAFT): array
     {
-        if (! in_array($mode, [self::MODE_DRAFT, self::MODE_REVIEW, self::MODE_FINAL], true)) {
+        if (! in_array($mode, [self::MODE_DRAFT, self::MODE_PRINT_READY], true)) {
             throw new DomainException('Mode preflight tidak valid.');
         }
 
@@ -95,20 +99,47 @@ class OfferPreflightValidator
         $requirements = is_array($snapshot['requirements'] ?? null) ? $snapshot['requirements'] : [];
 
         $flag(($metadata['number_allocation']['status'] ?? null) !== 'allocated', 'Nomor surat resmi belum dialokasikan.');
-        $flag(($metadata['template']['status'] ?? null) !== 'approved', 'Versi template legal belum disetujui.');
-        $flag(($metadata['issuer_profile']['status'] ?? null) !== 'approved', 'Profil penerbit belum disetujui.');
-        $flag(($metadata['signer']['status'] ?? null) !== 'approved', 'Profil penandatangan belum disetujui.');
+        $this->validateApprovedMaster(
+            is_array($metadata['template'] ?? null) ? $metadata['template'] : [],
+            'Versi template legal',
+            $flag,
+            true,
+        );
+        $this->validateApprovedMaster(
+            is_array($metadata['issuer_profile'] ?? null) ? $metadata['issuer_profile'] : [],
+            'Profil penerbit',
+            $flag,
+        );
+        $this->validateApprovedMaster(
+            is_array($metadata['signer'] ?? null) ? $metadata['signer'] : [],
+            'Profil penandatangan',
+            $flag,
+        );
         $flag(! $this->filled($engagement['recipient_organization'] ?? null), 'Nama organisasi penerima belum diisi.');
         $flag(! $this->filled($engagement['recipient_address'] ?? null), 'Alamat penerima belum diisi.');
+        $flag(! $this->filled($engagement['recipient_city'] ?? null), 'Kota penerima belum diisi.');
         $flag(! $this->filled($engagement['issue_city'] ?? null), 'Kota penerbitan belum diisi.');
         $flag(! $this->filled($engagement['purpose'] ?? null), 'Tujuan penilaian belum diisi.');
         $flag(! $this->filled($engagement['valuation_basis'] ?? null), 'Dasar nilai belum diisi.');
+        $flag(
+            ! $this->filled($engagement['valuation_date'] ?? null)
+                && ! $this->filled($engagement['valuation_date_rule'] ?? null),
+            'Tanggal penilaian atau aturan tanggal penilaian belum diisi.',
+        );
         $flag(! $this->filled($engagement['ownership_form'] ?? null), 'Bentuk kepemilikan belum diisi.');
         $flag(! $this->filled($engagement['investigation_level'] ?? null), 'Tingkat investigasi belum diisi.');
         $flag(! $this->filled($engagement['report_format'] ?? null), 'Format laporan belum diisi.');
+        $flag(
+            ! is_int($engagement['report_copies'] ?? null) || $engagement['report_copies'] < 1,
+            'Jumlah eksemplar laporan harus sedikitnya satu.',
+        );
         $flag(! $this->filled($engagement['completion_days'] ?? null), 'Durasi penyelesaian belum diisi.');
         $flag(! $this->filled($engagement['completion_day_type'] ?? null), 'Jenis hari penyelesaian belum diisi.');
         $flag(! $this->filled($engagement['tax_inclusion'] ?? null), 'Mode pajak belum dipilih.');
+        $flag(! $this->filled($snapshot['issuer']['name'] ?? null), 'Nama penerbit belum diisi.');
+        $flag(! $this->filledTextList($snapshot['issuer']['address_lines'] ?? null), 'Alamat penerbit belum diisi.');
+        $flag(! $this->filled($snapshot['signatures']['issuer_name'] ?? null), 'Nama penandatangan belum diisi.');
+        $flag(! $this->filled($snapshot['signatures']['issuer_title'] ?? null), 'Jabatan penandatangan belum diisi.');
 
         if (in_array($engagement['request_reference_type'] ?? 'none', ['letter', 'email'], true)) {
             $flag(! $this->filled($engagement['request_reference_no'] ?? null), 'Nomor referensi permintaan belum diisi.');
@@ -148,6 +179,9 @@ class OfferPreflightValidator
                         continue;
                     }
 
+                    $flag(! $this->filled($document['document_type'] ?? null), 'Jenis dokumen kepemilikan belum diisi.');
+                    $flag(! $this->filled($document['document_no'] ?? null), 'Nomor dokumen kepemilikan belum diisi.');
+
                     $key = mb_strtolower(trim((string) ($document['document_type'] ?? '')).'|'.trim((string) ($document['document_no'] ?? '')));
 
                     if (isset($documentKeys[$key])) {
@@ -184,11 +218,21 @@ class OfferPreflightValidator
         $flag(($commercial['document_payable_total'] ?? 0) === 0, 'Total nilai penawaran masih nol.');
 
         if ($strict && ($metadata['uses_provisional_copy'] ?? true)) {
-            $errors[] = 'Redaksi provisional DRAF tidak boleh diajukan untuk review atau finalisasi.';
+            $errors[] = 'Redaksi provisional DRAF tidak boleh digunakan untuk PDF siap cetak.';
         }
 
         if ($strict && ($metadata['uses_provisional_issuer'] ?? true)) {
-            $errors[] = 'Profil penerbit provisional tidak boleh diajukan untuk review atau finalisasi.';
+            $errors[] = 'Profil penerbit provisional tidak boleh digunakan untuk PDF siap cetak.';
+        }
+
+        if ($strict && OfferDocumentContentGuard::containsProvisionalMarker([
+            $snapshot['document'],
+            $snapshot['issuer'],
+            $snapshot['recipient'],
+            $snapshot['clauses'],
+            $snapshot['signatures'],
+        ])) {
+            $errors[] = 'PDF siap cetak tidak boleh memuat penanda DRAF atau redaksi provisional.';
         }
 
         return [
@@ -200,5 +244,54 @@ class OfferPreflightValidator
     private function filled(mixed $value): bool
     {
         return ! ($value === null || $value === '' || (is_string($value) && trim($value) === ''));
+    }
+
+    private function filledTextList(mixed $value): bool
+    {
+        if (! is_array($value) || $value === []) {
+            return false;
+        }
+
+        foreach ($value as $item) {
+            if (! is_string($item) || trim($item) === '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $master
+     * @param  callable(bool, string): void  $flag
+     */
+    private function validateApprovedMaster(
+        array $master,
+        string $label,
+        callable $flag,
+        bool $requiresActiveTemplate = false,
+    ): void {
+        $approved = ($master['status'] ?? null) === 'approved';
+        $flag(! $approved, "{$label} belum disetujui.");
+
+        if (! $approved) {
+            return;
+        }
+
+        $flag(! $this->filled($master['approved_by'] ?? null), "{$label} belum memiliki identitas penyetuju.");
+        $flag(! $this->filled($master['approved_at'] ?? null), "{$label} belum memiliki waktu persetujuan.");
+        $flag(! $this->validChecksum($master['checksum'] ?? null), "Checksum {$label} tidak valid.");
+        $flag(($master['integrity_valid'] ?? false) !== true, "Integritas isi {$label} tidak sesuai dengan checksum persetujuan.");
+        $flag(($master['is_effective'] ?? false) !== true, "{$label} belum atau tidak lagi berlaku pada tanggal penawaran.");
+
+        if ($requiresActiveTemplate) {
+            $flag(($master['template_active'] ?? false) !== true, 'Template penawaran tidak aktif.');
+            $flag(($master['schema_valid'] ?? false) !== true, 'Schema template penawaran resmi tidak valid atau tidak lengkap.');
+        }
+    }
+
+    private function validChecksum(mixed $checksum): bool
+    {
+        return is_string($checksum) && preg_match('/\A[a-f0-9]{64}\z/i', $checksum) === 1;
     }
 }

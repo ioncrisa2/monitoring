@@ -17,6 +17,12 @@
         <td>
             <p class="signature-name">{{ $snapshot['signatures']['issuer_name'] }}</p>
             <p>{{ $snapshot['signatures']['issuer_title'] }}</p>
+            @if ($snapshot['signatures']['issuer_permit_no'])
+                <p>Izin Penilai: {{ $snapshot['signatures']['issuer_permit_no'] }}</p>
+            @endif
+            @if ($snapshot['signatures']['issuer_registration_no'])
+                <p>Registrasi: {{ $snapshot['signatures']['issuer_registration_no'] }}</p>
+            @endif
         </td>
         <td>
             <p class="signature-name">Nama jelas dan tanda tangan basah</p>

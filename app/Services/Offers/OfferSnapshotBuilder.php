@@ -32,6 +32,7 @@ class OfferSnapshotBuilder
         private readonly OfferDocumentBootstrapper $bootstrapper,
         private readonly OfferFeeCalculator $feeCalculator,
         private readonly IndonesianAmountSpeller $amountSpeller,
+        private readonly OfferDocumentMasterIntegrityService $masterIntegrity,
     ) {}
 
     /**
@@ -41,7 +42,22 @@ class OfferSnapshotBuilder
      */
     public function build(Offer $offer): array
     {
-        $offer->loadMissing([
+        $connection = $offer->getConnection();
+        $build = fn (): array => $this->buildLocked($offer->getKey());
+
+        if ($connection->transactionLevel() > 0) {
+            return $build();
+        }
+
+        return $connection->transaction($build, 5);
+    }
+
+    /** @return array<string, mixed> */
+    private function buildLocked(mixed $offerKey): array
+    {
+        $offer = Offer::query()->lockForUpdate()->findOrFail($offerKey);
+
+        $offer->load([
             'branch',
             'debtor',
             'client',
@@ -51,6 +67,10 @@ class OfferSnapshotBuilder
             'engagement.templateVersion.template',
             'engagement.issuerProfileVersion',
             'engagement.signerVersion',
+            'subjects.assets.documents',
+            'feeItems',
+            'paymentTerms',
+            'requirements',
         ]);
 
         $form = $this->bootstrapper->loadForm($offer);
@@ -79,8 +99,12 @@ class OfferSnapshotBuilder
             'recipient' => $recipient,
             'clauses' => $clauses,
             'signatures' => [
-                'issuer_name' => $signer?->full_name ?? '[DRAF] Penandatangan belum dipilih',
+                'issuer_name' => $signer
+                    ? trim($signer->full_name.' '.($signer->title_suffix ?? ''))
+                    : '[DRAF] Penandatangan belum dipilih',
                 'issuer_title' => $signer?->position ?? '[DRAF] Jabatan penandatangan belum dipilih',
+                'issuer_permit_no' => $signer?->permit_no,
+                'issuer_registration_no' => $signer?->registration_no,
                 'client_name' => $recipient['name'],
                 'client_title' => $recipient['attention'],
             ],
@@ -104,11 +128,24 @@ class OfferSnapshotBuilder
                 'template' => $templateVersion ? [
                     'id' => $templateVersion->getKey(),
                     'template_code' => $templateVersion->template?->code,
+                    'template_active' => $templateVersion->template?->active === true,
                     'version_no' => $templateVersion->version_no,
                     'schema_version' => $templateVersion->schema_version,
                     'layout_version' => $templateVersion->layout_version,
                     'status' => $templateVersion->status,
                     'checksum' => $templateVersion->checksum,
+                    'approved_by' => $templateVersion->approved_by,
+                    'approved_at' => $templateVersion->approved_at?->toIso8601String(),
+                    'effective_from' => $templateVersion->effective_from?->format('Y-m-d'),
+                    'is_effective' => $this->isEffectiveOn(
+                        $offer->offer_date?->format('Y-m-d'),
+                        $templateVersion->effective_from?->format('Y-m-d'),
+                    ),
+                    'integrity_valid' => $this->masterIntegrity->verify($templateVersion),
+                    'schema_valid' => $this->masterIntegrity->templateSchemaErrors(
+                        (array) $templateVersion->clause_schema,
+                        is_array($templateVersion->condition_schema) ? $templateVersion->condition_schema : null,
+                    ) === [],
                 ] : ['status' => 'provisional'],
                 'issuer_profile' => $issuerProfile ? [
                     'id' => $issuerProfile->getKey(),
@@ -116,6 +153,16 @@ class OfferSnapshotBuilder
                     'status' => $issuerProfile->status,
                     'checksum' => $issuerProfile->checksum,
                     'letterhead_sha256' => $issuerProfile->letterhead_sha256,
+                    'approved_by' => $issuerProfile->approved_by,
+                    'approved_at' => $issuerProfile->approved_at?->toIso8601String(),
+                    'effective_from' => $issuerProfile->effective_from?->format('Y-m-d'),
+                    'effective_until' => $issuerProfile->effective_until?->format('Y-m-d'),
+                    'is_effective' => $this->isEffectiveOn(
+                        $offer->offer_date?->format('Y-m-d'),
+                        $issuerProfile->effective_from?->format('Y-m-d'),
+                        $issuerProfile->effective_until?->format('Y-m-d'),
+                    ),
+                    'integrity_valid' => $this->masterIntegrity->verify($issuerProfile),
                 ] : ['status' => 'provisional'],
                 'signer' => $signer ? [
                     'id' => $signer->getKey(),
@@ -123,18 +170,37 @@ class OfferSnapshotBuilder
                     'version_no' => $signer->version_no,
                     'status' => $signer->status,
                     'checksum' => $signer->checksum,
+                    'approved_by' => $signer->approved_by,
+                    'approved_at' => $signer->approved_at?->toIso8601String(),
+                    'effective_from' => $signer->effective_from?->format('Y-m-d'),
+                    'effective_until' => $signer->effective_until?->format('Y-m-d'),
+                    'is_effective' => $this->isEffectiveOn(
+                        $offer->offer_date?->format('Y-m-d'),
+                        $signer->effective_from?->format('Y-m-d'),
+                        $signer->effective_until?->format('Y-m-d'),
+                    ),
+                    'integrity_valid' => $this->masterIntegrity->verify($signer),
                 ] : null,
                 'renderer_profile' => [
                     'engine' => config('offer-documents.renderer.engine'),
                     'version' => config('offer-documents.renderer.version'),
                     'paper' => config('offer-documents.renderer.paper'),
                     'orientation' => config('offer-documents.renderer.orientation'),
-                    'header_mode' => config('offer-documents.renderer.header_mode'),
+                    'header_mode' => $templateVersion?->status === 'approved'
+                        ? $templateVersion->header_mode
+                        : config('offer-documents.renderer.header_mode'),
                 ],
                 'uses_provisional_copy' => $templateVersion === null
                     || $templateVersion->status !== 'approved'
+                    || ! $this->masterIntegrity->verify($templateVersion)
+                    || $this->masterIntegrity->templateSchemaErrors(
+                        (array) $templateVersion->clause_schema,
+                        is_array($templateVersion->condition_schema) ? $templateVersion->condition_schema : null,
+                    ) !== []
                     || $this->containsDraftMarker([$document, $clauses]),
-                'uses_provisional_issuer' => $issuerProfile === null || $issuerProfile->status !== 'approved',
+                'uses_provisional_issuer' => $issuerProfile === null
+                    || $issuerProfile->status !== 'approved'
+                    || ! $this->masterIntegrity->verify($issuerProfile),
             ],
         ];
     }
@@ -277,9 +343,12 @@ class OfferSnapshotBuilder
                 ?? 'Kota belum diisi',
             'date' => $this->formatDate($offer->offer_date),
             'subject' => $engagement['subject'] ?? 'Penawaran Jasa Penilaian',
-            'opening' => $engagement['opening_context']
-                ?? ($templateDocument['opening'] ?? null)
-                ?? (string) config('offer-documents.provisional.opening'),
+            'opening' => $templateVersion?->status === 'approved'
+                ? (($templateDocument['opening'] ?? null)
+                    ?? (string) config('offer-documents.provisional.opening'))
+                : ($engagement['opening_context']
+                    ?? ($templateDocument['opening'] ?? null)
+                    ?? (string) config('offer-documents.provisional.opening')),
             'closing' => ($templateDocument['closing'] ?? null)
                 ?? (string) config('offer-documents.provisional.closing'),
         ];
@@ -511,7 +580,7 @@ class OfferSnapshotBuilder
     {
         return array_values(array_filter(
             $values,
-            static fn (string $value): bool => ! str_contains(mb_strtoupper($value), 'DRAF'),
+            static fn (string $value): bool => ! OfferDocumentContentGuard::containsProvisionalMarker($value),
         ));
     }
 
@@ -545,20 +614,16 @@ class OfferSnapshotBuilder
 
     private function containsDraftMarker(mixed $value): bool
     {
-        if (is_string($value)) {
-            return str_contains(mb_strtoupper($value), 'DRAF');
-        }
+        return OfferDocumentContentGuard::containsProvisionalMarker($value);
+    }
 
-        if (! is_array($value)) {
+    private function isEffectiveOn(?string $date, ?string $effectiveFrom, ?string $effectiveUntil = null): bool
+    {
+        if ($date === null) {
             return false;
         }
 
-        foreach ($value as $item) {
-            if ($this->containsDraftMarker($item)) {
-                return true;
-            }
-        }
-
-        return false;
+        return ($effectiveFrom === null || $effectiveFrom <= $date)
+            && ($effectiveUntil === null || $effectiveUntil >= $date);
     }
 }

@@ -38,6 +38,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/offers/{offer}/document/download', [OfferDocumentController::class, 'download'])
         ->middleware(['permission:offers.documents.generate-draft', 'throttle:10,1'])
         ->name('offers.documents.download');
+    Route::get('/offers/{offer}/document/print-ready', [OfferDocumentController::class, 'printReady'])
+        ->middleware(['permission:offers.documents.generate-print-ready', 'throttle:10,1'])
+        ->name('offers.documents.print-ready');
     Route::get('/work-orders', WorkOrdersIndex::class)->middleware('permission:menu.work-orders')->name('work-orders.index');
     Route::get('/work-orders/{id}', WorkOrdersShow::class)->middleware('permission:menu.work-orders')->name('work-orders.show');
 
@@ -54,7 +57,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('master')->name('master.')->group(function () {
         Route::get('/branches', Branches::class)->middleware('permission:menu.master-data')->name('branches');
         Route::get('/users', Users::class)->middleware('permission:menu.master-users')->name('users');
-        Route::get('/roles-permissions', RolesPermissions::class)->middleware('permission:menu.master-users')->name('roles-permissions');
+        Route::get('/roles-permissions', RolesPermissions::class)->middleware('permission:users.manage')->name('roles-permissions');
         Route::get('/organizations', Organizations::class)->middleware('permission:menu.master-data')->name('organizations');
         Route::get('/debtors', Debtors::class)->middleware('permission:menu.master-data')->name('debtors');
     });

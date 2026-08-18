@@ -32,6 +32,7 @@ class RolePermissionSeeder extends Seeder
             'work-orders.assign-pic',
             'work-orders.change-status',
             'work-orders.edit-sla',
+            'work-orders.manage-assets',
             'work-orders.survey',
             'work-orders.review',
 
@@ -39,6 +40,7 @@ class RolePermissionSeeder extends Seeder
             'offers.documents.view',
             'offers.documents.manage',
             'offers.documents.generate-draft',
+            'offers.documents.generate-print-ready',
             'offers.cross-branch',
         ];
 
@@ -63,11 +65,13 @@ class RolePermissionSeeder extends Seeder
             'work-orders.assign-pic',
             'work-orders.change-status',
             'work-orders.edit-sla',
+            'work-orders.manage-assets',
             'work-orders.survey',
             'work-orders.review',
             'offers.documents.view',
             'offers.documents.manage',
             'offers.documents.generate-draft',
+            'offers.documents.generate-print-ready',
         ]);
 
         // Admin: Access to dashboard, offers, work orders, change status
@@ -77,6 +81,7 @@ class RolePermissionSeeder extends Seeder
             'menu.offers',
             'menu.work-orders',
             'work-orders.change-status',
+            'work-orders.manage-assets',
             'offers.documents.view',
             'offers.documents.manage',
             'offers.documents.generate-draft',

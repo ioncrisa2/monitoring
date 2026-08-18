@@ -6,14 +6,25 @@ use App\Livewire\Master\RolesPermissions;
 use App\Livewire\Offers\DocumentEditor;
 use App\Models\Branch;
 use App\Models\Debtor;
+use App\Models\DocumentSignerVersion;
+use App\Models\IssuerProfileVersion;
 use App\Models\Offer;
+use App\Models\OfferTemplate;
+use App\Models\OfferTemplateVersion;
 use App\Models\Organization;
 use App\Models\User;
 use App\Policies\OfferPolicy;
+use App\Services\Offers\OfferDocumentBootstrapper;
+use App\Services\Offers\OfferDocumentMasterApprovalService;
+use App\Services\Offers\OfferDocumentRenderer;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use InvalidArgumentException;
 use Livewire\Livewire;
+use Mockery\MockInterface;
+use RuntimeException;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -68,11 +79,214 @@ class OfferDocumentAccessTest extends TestCase
         $this->assertTrue(Gate::forUser($admin)->allows('viewDocument', $this->jakartaOffer));
         $this->assertTrue(Gate::forUser($admin)->allows('manageDocument', $this->jakartaOffer));
         $this->assertTrue(Gate::forUser($admin)->allows('generateDocumentDraft', $this->jakartaOffer));
+        $this->assertFalse(Gate::forUser($admin)->allows('generateDocumentPrintReady', $this->jakartaOffer));
         $this->assertFalse(Gate::forUser($admin)->allows('viewDocument', $this->surabayaOffer));
 
         $admin->givePermissionTo('offers.cross-branch');
 
         $this->assertTrue(Gate::forUser($admin->fresh())->allows('viewDocument', $this->surabayaOffer));
+    }
+
+    public function test_print_ready_requires_its_own_permission_and_branch_scope(): void
+    {
+        $draftOnlyAdmin = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'admin',
+        ]);
+
+        $this->actingAs($draftOnlyAdmin)
+            ->get(route('offers.documents.print-ready', $this->jakartaOffer))
+            ->assertForbidden();
+
+        $printer = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'surveyor',
+        ]);
+        $printer->givePermissionTo('offers.documents.generate-print-ready');
+
+        $this->assertTrue(Gate::forUser($printer)->allows('generateDocumentPrintReady', $this->jakartaOffer));
+        $this->assertFalse(Gate::forUser($printer)->allows('generateDocumentPrintReady', $this->surabayaOffer));
+
+        $this->actingAs($printer)
+            ->get(route('offers.documents.print-ready', $this->surabayaOffer))
+            ->assertForbidden();
+    }
+
+    public function test_print_ready_rejects_provisional_offer_without_writing_success_audit(): void
+    {
+        $printer = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'surveyor',
+        ]);
+        $printer->givePermissionTo('offers.documents.generate-print-ready');
+
+        $this->actingAs($printer)
+            ->get(route('offers.documents.print-ready', $this->jakartaOffer))
+            ->assertStatus(422)
+            ->assertHeaderMissing('content-disposition');
+
+        $this->assertDatabaseMissing('activity_logs', [
+            'user_id' => $printer->id,
+            'action' => 'GENERATE_PRINT_READY',
+            'model_type' => 'Offer',
+            'model_id' => $this->jakartaOffer->id,
+        ]);
+    }
+
+    public function test_authorized_same_branch_user_can_download_an_approved_print_ready_pdf(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+
+        $response = $this->actingAs($supervisor)
+            ->get(route('offers.documents.print-ready', $this->jakartaOffer));
+
+        $response->assertOk()
+            ->assertHeader('content-type', 'application/pdf')
+            ->assertHeader('cache-control', 'max-age=0, no-store, private')
+            ->assertHeader('x-content-type-options', 'nosniff');
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+
+        $disposition = (string) $response->headers->get('content-disposition');
+        $this->assertStringStartsWith('attachment; filename="penawaran-', $disposition);
+        $this->assertStringEndsWith('.pdf"', $disposition);
+        $this->assertStringNotContainsString('-draft.pdf', $disposition);
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $supervisor->id,
+            'action' => 'GENERATE_PRINT_READY',
+            'model_type' => 'Offer',
+            'model_id' => $this->jakartaOffer->id,
+        ]);
+    }
+
+    public function test_print_ready_rejects_master_content_tampered_outside_the_approval_workflow(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+
+        $templateVersion = $this->jakartaOffer->fresh()->engagement->templateVersion;
+        $schema = $templateVersion->clause_schema;
+        $schema['document']['opening'] = 'Konten yang diubah setelah persetujuan.';
+
+        DB::table('offer_template_versions')
+            ->where('id', $templateVersion->getKey())
+            ->update([
+                'clause_schema' => json_encode($schema, JSON_THROW_ON_ERROR),
+                'updated_at' => now(),
+            ]);
+
+        $this->actingAs($supervisor)
+            ->get(route('offers.documents.print-ready', $this->jakartaOffer))
+            ->assertStatus(422)
+            ->assertHeaderMissing('content-disposition');
+
+        $this->assertDatabaseMissing('activity_logs', [
+            'user_id' => $supervisor->id,
+            'action' => 'GENERATE_PRINT_READY',
+            'model_id' => $this->jakartaOffer->id,
+        ]);
+    }
+
+    public function test_print_ready_translates_only_renderer_contract_failures_to_a_generic_422(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+        $this->mock(OfferDocumentRenderer::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('render')
+                ->once()
+                ->andThrow(new InvalidArgumentException('detail internal renderer'));
+        });
+
+        $this->actingAs($supervisor)
+            ->get(route('offers.documents.print-ready', $this->jakartaOffer))
+            ->assertStatus(422);
+
+        $this->assertDatabaseMissing('activity_logs', [
+            'user_id' => $supervisor->id,
+            'action' => 'GENERATE_PRINT_READY',
+            'model_id' => $this->jakartaOffer->id,
+        ]);
+    }
+
+    public function test_print_ready_does_not_swallow_unexpected_renderer_failures(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+        $this->mock(OfferDocumentRenderer::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('render')
+                ->once()
+                ->andThrow(new RuntimeException('renderer gagal'));
+        });
+
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->actingAs($supervisor)
+                ->get(route('offers.documents.print-ready', $this->jakartaOffer));
+            $this->fail('Kegagalan renderer yang tidak terduga seharusnya diteruskan.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('renderer gagal', $exception->getMessage());
+        }
+
+        $this->assertDatabaseMissing('activity_logs', [
+            'user_id' => $supervisor->id,
+            'action' => 'GENERATE_PRINT_READY',
+            'model_id' => $this->jakartaOffer->id,
+        ]);
+    }
+
+    public function test_print_ready_ui_requires_strict_check_before_revealing_download_action(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+        $downloadUrl = route('offers.documents.print-ready', $this->jakartaOffer);
+
+        Livewire::actingAs($supervisor)
+            ->test(DocumentEditor::class, ['offer' => $this->jakartaOffer->fresh()])
+            ->assertSet('printReadyEligible', false)
+            ->assertSee('Periksa PDF siap cetak')
+            ->assertDontSeeHtml('href="'.$downloadUrl.'"')
+            ->call('checkPrintReady')
+            ->assertSet('preflight.errors', [])
+            ->assertSet('printReadyEligible', true)
+            ->assertSee('Unduh PDF siap cetak')
+            ->assertSeeHtml('href="'.$downloadUrl.'"');
+    }
+
+    public function test_print_ready_endpoint_is_throttled_without_extra_success_audit(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+        $this->mock(OfferDocumentRenderer::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('render')->times(10)->andReturn('%PDF-test');
+        });
+
+        $this->actingAs($supervisor);
+
+        for ($attempt = 1; $attempt <= 10; $attempt++) {
+            $this->get(route('offers.documents.print-ready', $this->jakartaOffer))->assertOk();
+        }
+
+        $this->get(route('offers.documents.print-ready', $this->jakartaOffer))->assertTooManyRequests();
+        $this->assertDatabaseCount('activity_logs', 10);
     }
 
     public function test_cross_branch_permission_alone_does_not_grant_document_access(): void
@@ -135,12 +349,12 @@ class OfferDocumentAccessTest extends TestCase
             ->get(route('offers.documents.edit', $this->jakartaOffer))
             ->assertOk()
             ->assertSee('Dokumen Penawaran')
-            ->assertSee('PDF siap cetak tanpa tanda tangan/stempel digital')
-            ->assertSee('Output yang tersedia saat ini masih DRAF')
             ->assertSee('Penerima dan referensi')
             ->assertSee('Pihak dan objek penilaian')
             ->assertSee('Biaya, pajak, dan termin')
             ->assertSee('Simpan draft')
+            ->assertDontSee('Periksa PDF siap cetak')
+            ->assertDontSee('Unduh PDF siap cetak')
             ->assertSeeHtml('wire:submit="saveDraft"')
             ->assertSeeHtml('wire:model="draft.engagement.recipient_organization"')
             ->assertSeeHtml('wire:click="checkPreflight"');
@@ -314,6 +528,7 @@ class OfferDocumentAccessTest extends TestCase
             'offers.documents.view',
             'offers.documents.manage',
             'offers.documents.generate-draft',
+            'offers.documents.generate-print-ready',
             'offers.cross-branch',
         ] as $permission) {
             $this->assertNotNull(Permission::findByName($permission));
@@ -323,6 +538,8 @@ class OfferDocumentAccessTest extends TestCase
         $sysadmin = User::factory()->create(['role' => 'sysadmin']);
 
         $this->assertTrue($admin->can('offers.documents.generate-draft'));
+        $this->assertFalse($admin->can('offers.documents.generate-print-ready'));
+        $this->assertTrue(User::factory()->create(['role' => 'supervisor'])->can('offers.documents.generate-print-ready'));
         $this->assertFalse($admin->can('offers.cross-branch'));
         $this->assertTrue($sysadmin->can('offers.cross-branch'));
 
@@ -330,7 +547,133 @@ class OfferDocumentAccessTest extends TestCase
             ->test(RolesPermissions::class)
             ->assertSee('Dokumen penawaran')
             ->assertSee('Lihat dokumen penawaran')
+            ->assertSee('Buat PDF siap cetak')
             ->assertSee('Akses penawaran lintas cabang');
+    }
+
+    private function makePrintReady(Offer $offer, Branch $branch, User $actor): void
+    {
+        $clauses = [];
+
+        foreach ((array) config('offer-documents.clause_titles') as $key => $title) {
+            $clauses[$key] = ['paragraphs' => ["Redaksi disetujui untuk {$title}."]];
+        }
+
+        $template = OfferTemplate::create([
+            'code' => 'STANDARD',
+            'name' => 'Template Standar',
+            'active' => true,
+            'is_default' => true,
+        ]);
+        $templateVersion = OfferTemplateVersion::create([
+            'offer_template_id' => $template->getKey(),
+            'version_no' => 1,
+            'schema_version' => 1,
+            'clause_schema' => [
+                'document' => [
+                    'opening' => 'Pembuka yang telah disetujui.',
+                    'closing' => 'Penutup yang telah disetujui.',
+                ],
+                'clauses' => $clauses,
+            ],
+            'layout_version' => 'standard-v1',
+            'header_mode' => 'odd_pages',
+            'effective_from' => now()->subDay(),
+        ]);
+        $issuer = IssuerProfileVersion::create([
+            'branch_id' => $branch->getKey(),
+            'version_no' => 1,
+            'legal_name' => 'KJPP HJA dan Rekan',
+            'address' => 'Jl. Kantor 1',
+            'city' => 'Jakarta',
+            'phone' => '021-123',
+            'effective_from' => now()->subDay(),
+        ]);
+        $signer = DocumentSignerVersion::create([
+            'branch_id' => $branch->getKey(),
+            'signer_key' => 'partner-utama',
+            'version_no' => 1,
+            'full_name' => 'Penilai Utama',
+            'position' => 'Partner',
+            'effective_from' => now()->subDay(),
+        ]);
+
+        $approval = app(OfferDocumentMasterApprovalService::class);
+        $templateVersion = $approval->approve($templateVersion, $actor);
+        $issuer = $approval->approve($issuer, $actor);
+        $signer = $approval->approve($signer, $actor);
+
+        app(OfferDocumentBootstrapper::class)->saveDraft($offer, [
+            'engagement' => [
+                'lock_version' => 0,
+                'template_version_id' => $templateVersion->getKey(),
+                'issuer_profile_version_id' => $issuer->getKey(),
+                'signer_version_id' => $signer->getKey(),
+                'issue_city' => 'Jakarta',
+                'recipient_attention' => 'Direktur',
+                'recipient_organization' => 'PT Bank Contoh',
+                'recipient_address' => 'Jl. Contoh No. 1',
+                'recipient_city' => 'Jakarta',
+                'subject' => 'Penawaran Jasa Penilaian',
+                'request_reference_type' => 'letter',
+                'request_reference_no' => 'REQ-001',
+                'request_reference_date' => '2026-08-10',
+                'ownership_form' => 'Hak Milik',
+                'currency' => 'IDR',
+                'purpose' => 'Penjaminan utang',
+                'valuation_basis' => 'Nilai Pasar',
+                'valuation_date' => '2026-08-12',
+                'investigation_level' => 'full',
+                'report_format' => 'complete',
+                'report_language' => 'id',
+                'report_copies' => 2,
+                'completion_days' => 10,
+                'completion_day_type' => 'business',
+                'tax_inclusion' => 'excluded',
+                'ppn_rate_bps' => 1100,
+                'pph_rate_bps' => 200,
+                'cost_inclusions' => ['Transportasi'],
+            ],
+            'subjects' => [[
+                'debtor_id' => $offer->debtor_id,
+                'name_snapshot' => 'PT Contoh Debitur',
+                'identifier_snapshot' => 'DEB-001',
+                'address_snapshot' => 'Jakarta',
+                'is_primary' => true,
+                'sort_order' => 0,
+                'assets' => [[
+                    'asset_type' => 'tanah',
+                    'description' => 'Sebidang tanah',
+                    'address' => 'Jl. Aset No. 1, Jakarta',
+                    'city' => 'Jakarta',
+                    'province' => 'DKI Jakarta',
+                    'sort_order' => 0,
+                    'documents' => [[
+                        'document_type' => 'SHM',
+                        'document_no' => '123',
+                        'is_primary' => true,
+                        'sort_order' => 0,
+                    ]],
+                ]],
+            ]],
+            'fee_items' => [[
+                'label' => 'Jasa Penilaian',
+                'quantity' => 1,
+                'unit_amount' => 1_000_000,
+                'sort_order' => 0,
+            ]],
+            'payment_terms' => [[
+                'sequence' => 1,
+                'percentage_bps' => 10_000,
+                'trigger_text' => 'Setelah laporan selesai',
+            ]],
+            'requirements' => [[
+                'requirement_code' => 'SHM',
+                'description_snapshot' => 'Salinan sertifikat tanah',
+                'emphasis_style' => 'normal',
+                'sort_order' => 0,
+            ]],
+        ], $actor);
     }
 
     private function createBranch(string $code, int $numberCode, string $name): Branch

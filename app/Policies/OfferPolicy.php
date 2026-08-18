@@ -22,6 +22,11 @@ class OfferPolicy
         return $user->can('offers.documents.generate-draft') && $this->canAccessBranch($user, $offer);
     }
 
+    public function generateDocumentPrintReady(User $user, Offer $offer): bool
+    {
+        return $user->can('offers.documents.generate-print-ready') && $this->canAccessBranch($user, $offer);
+    }
+
     private function canAccessBranch(User $user, Offer $offer): bool
     {
         if ($user->can('offers.cross-branch')) {

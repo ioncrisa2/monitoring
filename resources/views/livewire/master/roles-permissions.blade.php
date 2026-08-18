@@ -19,6 +19,7 @@
             'offers.documents.view' => 'Lihat dokumen penawaran',
             'offers.documents.manage' => 'Kelola draft dokumen',
             'offers.documents.generate-draft' => 'Buat pratinjau PDF draft',
+            'offers.documents.generate-print-ready' => 'Buat PDF siap cetak',
             'offers.cross-branch' => 'Akses penawaran lintas cabang',
             'users.manage' => 'Kelola pengguna',
             'work-orders.assign-pic' => 'Atur PIC',
@@ -111,11 +112,20 @@
                             wire:loading.attr="disabled"
                             wire:target="savePermissions"
                             class="w-full sm:w-auto"
+                            :disabled="$selectedRoleProtected"
                         >
                             <span wire:loading.remove wire:target="savePermissions">Simpan hak akses</span>
                             <span wire:loading wire:target="savePermissions">Menyimpan…</span>
                         </x-primary-button>
                     </div>
+
+                    @if($selectedRoleProtected)
+                        <div class="ui-surface-subtle border-l-4 border-amber-500 px-4 py-3 text-sm text-ink-secondary" role="status">
+                            {{ $selectedRoleProtectionMessage }}
+                        </div>
+                    @endif
+
+                    <x-input-error :messages="$errors->get('selectedRoleId')" />
 
                     <div class="divide-y divide-line">
                         @foreach($groupedPermissions as $category => $permissions)
@@ -134,6 +144,7 @@
                                                     type="checkbox"
                                                     value="{{ $permission->name }}"
                                                     wire:model="selectedPermissions"
+                                                    @disabled($selectedRoleProtected)
                                                     class="mt-0.5 size-4 rounded border-line-strong text-brand focus:ring-brand"
                                                 >
                                                 <span class="min-w-0">

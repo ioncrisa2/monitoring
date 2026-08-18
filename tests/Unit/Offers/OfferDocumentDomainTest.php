@@ -13,10 +13,13 @@ use App\Models\OfferTemplateVersion;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Offers\OfferDocumentBootstrapper;
+use App\Services\Offers\OfferDocumentMasterApprovalService;
+use App\Services\Offers\OfferDocumentMasterIntegrityService;
 use App\Services\Offers\OfferPreflightValidator;
 use App\Services\Offers\OfferSnapshotBuilder;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class OfferDocumentDomainTest extends TestCase
@@ -29,9 +32,9 @@ class OfferDocumentDomainTest extends TestCase
 
         $snapshot = app(OfferSnapshotBuilder::class)->build($offer);
         $preflight = app(OfferPreflightValidator::class)->validate($snapshot);
-        $reviewPreflight = app(OfferPreflightValidator::class)->validate(
+        $printReadyPreflight = app(OfferPreflightValidator::class)->validate(
             $snapshot,
-            OfferPreflightValidator::MODE_REVIEW,
+            OfferPreflightValidator::MODE_PRINT_READY,
         );
 
         $this->assertCount(25, $snapshot['clauses']);
@@ -39,7 +42,13 @@ class OfferDocumentDomainTest extends TestCase
         $this->assertArrayNotHasKey('internal_note', $snapshot['engagement']);
         $this->assertSame([], $preflight['errors']);
         $this->assertNotEmpty($preflight['warnings']);
-        $this->assertNotEmpty($reviewPreflight['errors']);
+        $this->assertContains('Versi template legal belum disetujui.', $printReadyPreflight['errors']);
+        $this->assertContains('Profil penerbit belum disetujui.', $printReadyPreflight['errors']);
+        $this->assertContains('Profil penandatangan belum disetujui.', $printReadyPreflight['errors']);
+        $this->assertContains(
+            'Redaksi provisional DRAF tidak boleh digunakan untuk PDF siap cetak.',
+            $printReadyPreflight['errors'],
+        );
         $this->assertTrue($snapshot['metadata']['uses_provisional_copy']);
         $this->assertTrue($snapshot['metadata']['uses_provisional_issuer']);
     }
@@ -65,7 +74,7 @@ class OfferDocumentDomainTest extends TestCase
         $snapshot = $snapshotBuilder->build($offer->fresh());
         $preflight = app(OfferPreflightValidator::class)->validate(
             $snapshot,
-            OfferPreflightValidator::MODE_REVIEW,
+            OfferPreflightValidator::MODE_PRINT_READY,
         );
 
         $this->assertSame(1, $engagement->lock_version);
@@ -78,6 +87,11 @@ class OfferDocumentDomainTest extends TestCase
         $this->assertSame(0, $offer->requirements()->sole()->sort_order);
         $this->assertSame([], $preflight['errors']);
         $this->assertSame([], $preflight['warnings']);
+        $this->assertFalse($snapshot['metadata']['uses_provisional_copy']);
+        $this->assertFalse($snapshot['metadata']['uses_provisional_issuer']);
+        $this->assertSame('approved', $snapshot['metadata']['template']['status']);
+        $this->assertSame('approved', $snapshot['metadata']['issuer_profile']['status']);
+        $this->assertSame('approved', $snapshot['metadata']['signer']['status']);
         $this->assertSame(1_110_000, $snapshot['commercial']['document_payable_total']);
         $this->assertSame('Satu juta seratus sepuluh ribu rupiah', $snapshot['commercial']['amount_in_words']);
         $this->assertStringContainsString('SHM 123', $snapshot['clauses'][3]['items'][0]);
@@ -90,6 +104,80 @@ class OfferDocumentDomainTest extends TestCase
             'offer_id' => $offer->getKey(),
             'full_number' => $offer->offer_no,
         ]);
+    }
+
+    public function test_snapshot_reloads_a_locked_offer_and_its_nested_rows_inside_an_existing_transaction(): void
+    {
+        [$offer, $user, $branch] = $this->offerFixture();
+        [$templateVersion, $issuer, $signer] = $this->approvedMasters($branch, $user);
+        $bootstrapper = app(OfferDocumentBootstrapper::class);
+        $bootstrapper->saveDraft(
+            $offer,
+            $this->completePayload($offer, $templateVersion, $issuer, $signer),
+            $user,
+        );
+
+        $staleOffer = Offer::query()->with([
+            'branch',
+            'debtor',
+            'client',
+            'reportUser',
+            'creator',
+            'currentNumberAllocation',
+            'engagement.templateVersion.template',
+            'engagement.issuerProfileVersion',
+            'engagement.signerVersion',
+            'subjects.assets.documents',
+            'feeItems',
+            'paymentTerms',
+            'requirements',
+        ])->findOrFail($offer->getKey());
+
+        $updatedPayload = $bootstrapper->loadForm($offer->fresh());
+        $updatedPayload['engagement']['subject'] = 'Penawaran yang telah diperbarui';
+        $updatedPayload['subjects'][0]['name_snapshot'] = 'Subject versi terbaru';
+        $updatedPayload['subjects'][0]['assets'][0]['description'] = 'Aset versi terbaru';
+        $bootstrapper->saveDraft($offer->fresh(), $updatedPayload, $user);
+
+        $snapshot = DB::transaction(
+            fn (): array => app(OfferSnapshotBuilder::class)->build($staleOffer),
+        );
+
+        $this->assertSame(2, $snapshot['engagement']['lock_version']);
+        $this->assertSame('Penawaran yang telah diperbarui', $snapshot['document']['subject']);
+        $this->assertSame('Subject versi terbaru', $snapshot['subjects'][0]['name_snapshot']);
+        $this->assertSame('Aset versi terbaru', $snapshot['subjects'][0]['assets'][0]['description']);
+    }
+
+    public function test_strict_preflight_requires_complete_output_and_signing_identity(): void
+    {
+        [$offer, $user, $branch] = $this->offerFixture();
+        [$templateVersion, $issuer, $signer] = $this->approvedMasters($branch, $user);
+        app(OfferDocumentBootstrapper::class)->saveDraft(
+            $offer,
+            $this->completePayload($offer, $templateVersion, $issuer, $signer),
+            $user,
+        );
+        $snapshot = app(OfferSnapshotBuilder::class)->build($offer->fresh());
+        $snapshot['engagement']['report_copies'] = 0;
+        $snapshot['engagement']['valuation_date'] = null;
+        $snapshot['engagement']['valuation_date_rule'] = null;
+        $snapshot['issuer']['name'] = '';
+        $snapshot['issuer']['address_lines'] = [];
+        $snapshot['signatures']['issuer_name'] = '';
+        $snapshot['signatures']['issuer_title'] = '';
+
+        $errors = app(OfferPreflightValidator::class)
+            ->validate($snapshot, OfferPreflightValidator::MODE_PRINT_READY)['errors'];
+
+        $this->assertContains('Jumlah eksemplar laporan harus sedikitnya satu.', $errors);
+        $this->assertContains('Tanggal penilaian atau aturan tanggal penilaian belum diisi.', $errors);
+        $this->assertContains('Nama penerbit belum diisi.', $errors);
+        $this->assertContains('Alamat penerbit belum diisi.', $errors);
+        $this->assertContains('Nama penandatangan belum diisi.', $errors);
+        $this->assertContains('Jabatan penandatangan belum diisi.', $errors);
+        $this->assertSame(OfferPreflightValidator::MODE_PRINT_READY, OfferPreflightValidator::MODE_REVIEW);
+        $this->assertSame(OfferPreflightValidator::MODE_PRINT_READY, OfferPreflightValidator::MODE_FINAL);
     }
 
     public function test_save_draft_rejects_stale_lock_and_nested_ids_from_another_offer(): void
@@ -162,6 +250,102 @@ class OfferDocumentDomainTest extends TestCase
         $this->assertNull($offer->fresh()->current_number_allocation_id);
         $this->assertDatabaseMissing('offer_number_allocations', ['offer_id' => $offer->getKey()]);
         $this->assertDatabaseMissing('offer_engagements', ['offer_id' => $offer->getKey()]);
+    }
+
+    public function test_master_approval_computes_canonical_checksums_and_makes_approved_rows_immutable(): void
+    {
+        [, $user, $branch] = $this->offerFixture();
+        [$template, $issuer, $signer] = $this->approvedMasters($branch, $user);
+        $integrity = app(OfferDocumentMasterIntegrityService::class);
+
+        $this->assertTrue($integrity->verify($template));
+        $this->assertTrue($integrity->verify($issuer));
+        $this->assertTrue($integrity->verify($signer));
+        $this->assertSame($user->getKey(), $template->approved_by);
+        $this->assertNotNull($template->approved_at);
+
+        try {
+            $issuer->update(['phone' => '021-999']);
+            $this->fail('Master approved seharusnya tidak dapat diubah.');
+        } catch (DomainException $exception) {
+            $this->assertStringContainsString('immutable', $exception->getMessage());
+        }
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('tidak dapat dihapus');
+        $signer->delete();
+    }
+
+    public function test_template_approval_rejects_incomplete_unknown_and_provisional_clauses(): void
+    {
+        [, $user] = $this->offerFixture();
+        $template = OfferTemplate::create([
+            'code' => 'INVALID',
+            'name' => 'Template Invalid',
+            'active' => true,
+        ]);
+        $version = OfferTemplateVersion::create([
+            'offer_template_id' => $template->getKey(),
+            'version_no' => 1,
+            'schema_version' => 1,
+            'clause_schema' => [
+                'document' => [
+                    'opening' => '[DRAF] Pembuka sementara.',
+                    'closing' => 'Penutup resmi.',
+                    'ignored_field' => 'Tidak boleh diabaikan diam-diam.',
+                ],
+                'clauses' => [
+                    'unknown_clause' => ['paragraphs' => 'bukan-list'],
+                ],
+            ],
+            'condition_schema' => ['operator' => 'unsupported'],
+            'layout_version' => 'standard-v1',
+            'header_mode' => 'odd_pages',
+            'effective_from' => now()->subDay(),
+        ]);
+
+        try {
+            app(OfferDocumentMasterApprovalService::class)->approve($version, $user);
+            $this->fail('Schema template invalid seharusnya tidak dapat disetujui.');
+        } catch (DomainException $exception) {
+            $this->assertStringContainsString('Klausul wajib belum tersedia', $exception->getMessage());
+            $this->assertStringContainsString('Klausul tidak dikenal', $exception->getMessage());
+            $this->assertStringContainsString('condition_schema belum didukung', $exception->getMessage());
+            $this->assertStringContainsString('Field document tidak dikenal', $exception->getMessage());
+            $this->assertStringContainsString('DRAF', $exception->getMessage());
+        }
+
+        $this->assertSame('draft', $version->fresh()->status);
+        $this->assertNull($version->fresh()->approved_by);
+    }
+
+    public function test_model_cannot_bypass_the_master_approval_service(): void
+    {
+        [, $user, $branch] = $this->offerFixture();
+        $issuer = IssuerProfileVersion::create([
+            'branch_id' => $branch->getKey(),
+            'version_no' => 1,
+            'legal_name' => 'KJPP HJA dan Rekan',
+            'address' => 'Jl. Kantor 1',
+            'city' => 'Jakarta',
+            'checksum' => str_repeat('f', 64),
+        ]);
+
+        $this->assertNotSame(str_repeat('f', 64), $issuer->checksum);
+
+        try {
+            $issuer->update([
+                'status' => 'approved',
+                'approved_by' => $user->getKey(),
+                'approved_at' => now(),
+            ]);
+            $this->fail('Status approved seharusnya hanya dapat diberikan oleh approval service.');
+        } catch (DomainException $exception) {
+            $this->assertStringContainsString('layanan approval resmi', $exception->getMessage());
+        }
+
+        $this->assertSame('draft', $issuer->fresh()->status);
+        $this->assertNull($issuer->fresh()->approved_by);
     }
 
     /** @return array{Offer, User, Branch} */
@@ -237,10 +421,7 @@ class OfferDocumentDomainTest extends TestCase
             ],
             'layout_version' => 'standard-v1',
             'header_mode' => 'odd_pages',
-            'status' => 'approved',
-            'checksum' => str_repeat('a', 64),
-            'approved_by' => $user->getKey(),
-            'approved_at' => now(),
+            'effective_from' => now()->subDay(),
         ]);
         $issuer = IssuerProfileVersion::create([
             'branch_id' => $branch->getKey(),
@@ -249,10 +430,7 @@ class OfferDocumentDomainTest extends TestCase
             'address' => 'Jl. Kantor 1',
             'city' => 'Jakarta',
             'phone' => '021-123',
-            'status' => 'approved',
-            'checksum' => str_repeat('b', 64),
-            'approved_by' => $user->getKey(),
-            'approved_at' => now(),
+            'effective_from' => now()->subDay(),
         ]);
         $signer = DocumentSignerVersion::create([
             'branch_id' => $branch->getKey(),
@@ -260,11 +438,13 @@ class OfferDocumentDomainTest extends TestCase
             'version_no' => 1,
             'full_name' => 'Penilai Utama',
             'position' => 'Partner',
-            'status' => 'approved',
-            'checksum' => str_repeat('c', 64),
-            'approved_by' => $user->getKey(),
-            'approved_at' => now(),
+            'effective_from' => now()->subDay(),
         ]);
+
+        $approval = app(OfferDocumentMasterApprovalService::class);
+        $templateVersion = $approval->approve($templateVersion, $user);
+        $issuer = $approval->approve($issuer, $user);
+        $signer = $approval->approve($signer, $user);
 
         return [$templateVersion, $issuer, $signer];
     }

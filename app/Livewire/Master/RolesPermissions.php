@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Master;
 
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -22,8 +23,12 @@ class RolesPermissions extends Component
 
     public function mount(): void
     {
-        $this->authorize('menu.master-users');
-        $firstRole = Role::first();
+        $this->authorize('users.manage');
+        $firstRole = Role::query()
+            ->where('guard_name', 'web')
+            ->orderBy('id')
+            ->first();
+
         if ($firstRole) {
             $this->selectRole($firstRole->id);
         }
@@ -31,8 +36,13 @@ class RolesPermissions extends Component
 
     public function selectRole(int $roleId): void
     {
-        $this->authorize('menu.master-users');
-        $role = Role::with('permissions')->findOrFail($roleId);
+        $this->authorize('users.manage');
+        $role = Role::query()
+            ->where('guard_name', 'web')
+            ->with('permissions')
+            ->findOrFail($roleId);
+
+        $this->resetErrorBag();
         $this->selectedRoleId = $role->id;
         $this->selectedRoleName = $role->name;
         $this->selectedPermissions = $role->permissions->pluck('name')->toArray();
@@ -40,14 +50,33 @@ class RolesPermissions extends Component
 
     public function savePermissions(): void
     {
-        $this->authorize('menu.master-users');
+        $this->authorize('users.manage');
+        $validated = $this->validate([
+            'selectedRoleId' => [
+                'required',
+                'integer',
+                Rule::exists(Role::class, 'id')->where('guard_name', 'web'),
+            ],
+            'selectedPermissions' => ['array'],
+            'selectedPermissions.*' => [
+                'string',
+                'distinct',
+                Rule::exists(Permission::class, 'name')->where('guard_name', 'web'),
+            ],
+        ]);
 
-        if (! $this->selectedRoleId) {
+        $role = Role::query()
+            ->where('guard_name', 'web')
+            ->findOrFail($validated['selectedRoleId']);
+        $protectionMessage = $this->roleProtectionMessage($role);
+
+        if ($protectionMessage !== null) {
+            $this->addError('selectedRoleId', $protectionMessage);
+
             return;
         }
 
-        $role = Role::findOrFail($this->selectedRoleId);
-        $role->syncPermissions($this->selectedPermissions);
+        $role->syncPermissions($validated['selectedPermissions']);
 
         // Clear Spatie permission cache
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
@@ -57,7 +86,7 @@ class RolesPermissions extends Component
 
     public function createRole(): void
     {
-        $this->authorize('menu.master-users');
+        $this->authorize('users.manage');
         $this->validate([
             'newRoleName' => 'required|string|max:50|unique:roles,name',
         ]);
@@ -75,8 +104,22 @@ class RolesPermissions extends Component
 
     public function render()
     {
-        $roles = Role::withCount('users')->with('permissions')->get();
-        $allPermissions = Permission::all();
+        $this->authorize('users.manage');
+
+        $roles = Role::query()
+            ->where('guard_name', 'web')
+            ->withCount('users')
+            ->with('permissions')
+            ->get();
+        $allPermissions = Permission::query()
+            ->where('guard_name', 'web')
+            ->get();
+        $selectedRole = $this->selectedRoleId
+            ? $roles->firstWhere('id', $this->selectedRoleId)
+            : null;
+        $selectedRoleProtectionMessage = $selectedRole
+            ? $this->roleProtectionMessage($selectedRole)
+            : null;
 
         // Categorized permissions
         $groupedPermissions = [
@@ -89,6 +132,23 @@ class RolesPermissions extends Component
         return view('livewire.master.roles-permissions', [
             'roles' => $roles,
             'groupedPermissions' => $groupedPermissions,
+            'selectedRoleProtected' => $selectedRoleProtectionMessage !== null,
+            'selectedRoleProtectionMessage' => $selectedRoleProtectionMessage,
         ])->layout('layouts.app');
+    }
+
+    private function roleProtectionMessage(Role $role): ?string
+    {
+        if ($role->name === 'sysadmin') {
+            return 'Hak akses role sysadmin dilindungi dan tidak dapat diubah.';
+        }
+
+        $actor = auth()->user();
+
+        if ($actor !== null && $actor->roles()->whereKey($role->getKey())->exists()) {
+            return 'Anda tidak dapat mengubah hak akses role yang sedang digunakan oleh akun sendiri.';
+        }
+
+        return null;
     }
 }

@@ -2,10 +2,15 @@
 
 namespace App\Livewire\Offers;
 
+use App\Models\DocumentSignerVersion;
+use App\Models\IssuerProfileVersion;
 use App\Models\Offer;
+use App\Models\OfferTemplateVersion;
 use App\Models\User;
+use App\Services\Offers\OfferDocumentMasterIntegrityService;
 use DomainException;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -46,6 +51,9 @@ class DocumentEditor extends Component
         'warnings' => [],
     ];
 
+    #[Locked]
+    public bool $printReadyEligible = false;
+
     public function mount(Offer $offer): void
     {
         $this->authorize('viewDocument', $offer);
@@ -58,6 +66,7 @@ class DocumentEditor extends Component
     public function updatedDraft(): void
     {
         $this->preflight = ['errors' => [], 'warnings' => []];
+        $this->printReadyEligible = false;
     }
 
     public function saveDraft(): void
@@ -87,6 +96,7 @@ class DocumentEditor extends Component
 
         $this->draft = $bootstrapper->loadForm($offer->fresh());
         $this->preflight = ['errors' => [], 'warnings' => []];
+        $this->printReadyEligible = false;
 
         session()->flash('message', 'Draft dokumen penawaran berhasil disimpan.');
     }
@@ -112,6 +122,33 @@ class DocumentEditor extends Component
             'errors' => array_values($result['errors'] ?? []),
             'warnings' => array_values($result['warnings'] ?? []),
         ];
+        $this->printReadyEligible = false;
+    }
+
+    public function checkPrintReady(): void
+    {
+        $offer = $this->findOffer();
+        $this->authorize('generateDocumentPrintReady', $offer);
+
+        if (! class_exists(self::SNAPSHOT_BUILDER) || ! class_exists(self::PREFLIGHT_VALIDATOR)) {
+            $this->preflight = [
+                'errors' => ['Pemeriksaan PDF siap cetak belum tersedia.'],
+                'warnings' => [],
+            ];
+            $this->printReadyEligible = false;
+
+            return;
+        }
+
+        $snapshot = app(self::SNAPSHOT_BUILDER)->build($offer);
+        $validator = app(self::PREFLIGHT_VALIDATOR);
+        $result = $validator->validate($snapshot, $validator::MODE_PRINT_READY);
+
+        $this->preflight = [
+            'errors' => array_values($result['errors'] ?? []),
+            'warnings' => array_values($result['warnings'] ?? []),
+        ];
+        $this->printReadyEligible = $this->preflight['errors'] === [];
     }
 
     public function addSubject(): void
@@ -293,12 +330,17 @@ class DocumentEditor extends Component
         $offer = $this->findOffer()->load(['branch', 'debtor', 'client', 'reportUser']);
         $this->authorize('viewDocument', $offer);
 
+        $masterOptions = $this->approvedMasterOptions($offer);
+
         return view('livewire.offers.document-editor', [
             'offer' => $offer,
             'canManage' => Auth::user()?->can('manageDocument', $offer) === true,
             'canGenerateDraft' => Auth::user()?->can('generateDocumentDraft', $offer) === true,
+            'canGeneratePrintReady' => Auth::user()?->can('generateDocumentPrintReady', $offer) === true,
             'domainReady' => class_exists(self::BOOTSTRAPPER),
             'rendererReady' => class_exists('App\\Services\\Offers\\OfferDocumentRenderer'),
+            'printReadyRouteReady' => Route::has('offers.documents.print-ready'),
+            ...$masterOptions,
         ])->layout('layouts.app');
     }
 
@@ -534,5 +576,70 @@ class DocumentEditor extends Component
     private function authorizeManage(): void
     {
         $this->authorize('manageDocument', $this->findOffer());
+    }
+
+    /** @return array<string, mixed> */
+    private function approvedMasterOptions(Offer $offer): array
+    {
+        $effectiveOn = $offer->offer_date?->format('Y-m-d') ?? now()->toDateString();
+        $integrity = app(OfferDocumentMasterIntegrityService::class);
+
+        $templateVersions = OfferTemplateVersion::query()
+            ->with('template')
+            ->where('status', 'approved')
+            ->whereNotNull('approved_by')
+            ->whereNotNull('approved_at')
+            ->where('checksum', '<>', '')
+            ->whereHas('template', fn ($query) => $query->where('active', true))
+            ->where(fn ($query) => $query
+                ->whereNull('effective_from')
+                ->orWhereDate('effective_from', '<=', $effectiveOn))
+            ->orderByDesc('effective_from')
+            ->orderByDesc('version_no')
+            ->get()
+            ->filter(fn (OfferTemplateVersion $version): bool => $integrity->verify($version)
+                && $integrity->templateSchemaErrors(
+                    (array) $version->clause_schema,
+                    is_array($version->condition_schema) ? $version->condition_schema : null,
+                ) === [])
+            ->values();
+
+        $issuerProfiles = IssuerProfileVersion::query()
+            ->where('branch_id', $offer->branch_id)
+            ->where('status', 'approved')
+            ->whereNotNull('approved_by')
+            ->whereNotNull('approved_at')
+            ->where('checksum', '<>', '')
+            ->where(fn ($query) => $query
+                ->whereNull('effective_from')
+                ->orWhereDate('effective_from', '<=', $effectiveOn))
+            ->where(fn ($query) => $query
+                ->whereNull('effective_until')
+                ->orWhereDate('effective_until', '>=', $effectiveOn))
+            ->orderByDesc('effective_from')
+            ->orderByDesc('version_no')
+            ->get()
+            ->filter(fn (IssuerProfileVersion $profile): bool => $integrity->verify($profile))
+            ->values();
+
+        $signerVersions = DocumentSignerVersion::query()
+            ->where('branch_id', $offer->branch_id)
+            ->where('status', 'approved')
+            ->whereNotNull('approved_by')
+            ->whereNotNull('approved_at')
+            ->where('checksum', '<>', '')
+            ->where(fn ($query) => $query
+                ->whereNull('effective_from')
+                ->orWhereDate('effective_from', '<=', $effectiveOn))
+            ->where(fn ($query) => $query
+                ->whereNull('effective_until')
+                ->orWhereDate('effective_until', '>=', $effectiveOn))
+            ->orderByDesc('effective_from')
+            ->orderByDesc('version_no')
+            ->get()
+            ->filter(fn (DocumentSignerVersion $signer): bool => $integrity->verify($signer))
+            ->values();
+
+        return compact('templateVersions', 'issuerProfiles', 'signerVersions');
     }
 }

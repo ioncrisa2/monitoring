@@ -2,6 +2,7 @@
 
 namespace App\Services\Offers;
 
+use App\Enums\OfferDocumentOutputMode;
 use Dompdf\Canvas;
 use Dompdf\Dompdf;
 use Dompdf\FontMetrics;
@@ -12,31 +13,40 @@ use LogicException;
 
 class OfferDocumentRenderer
 {
-    public function render(array $snapshot): string
-    {
+    private const HEADER_MODES = ['odd_pages', 'all_pages'];
+
+    public function render(
+        array $snapshot,
+        OfferDocumentOutputMode $mode = OfferDocumentOutputMode::Draft,
+    ): string {
         $this->assertPrintOnlyContract();
+        $this->assertOutputModeContract($snapshot, $mode);
+        $headerMode = $this->resolveHeaderMode($snapshot);
         $snapshot = $this->validatedSnapshot($snapshot);
         $dompdf = new Dompdf($this->options());
         $dompdf->setBasePath(resource_path('views/pdf/offers'));
-        $dompdf->loadHtml($this->renderValidatedHtml($snapshot), 'UTF-8');
+        $dompdf->loadHtml($this->renderValidatedHtml($snapshot, $mode), 'UTF-8');
         $dompdf->setPaper(
             (string) config('offer-documents.renderer.paper', 'a4'),
             (string) config('offer-documents.renderer.orientation', 'portrait'),
         );
         $dompdf->render();
 
-        $this->decoratePages($dompdf, $snapshot);
+        $this->decoratePages($dompdf, $snapshot, $mode, $headerMode);
 
         return $dompdf->output([
             'compress' => (bool) config('offer-documents.renderer.compress', true),
         ]);
     }
 
-    public function renderHtml(array $snapshot): string
-    {
+    public function renderHtml(
+        array $snapshot,
+        OfferDocumentOutputMode $mode = OfferDocumentOutputMode::Draft,
+    ): string {
         $this->assertPrintOnlyContract();
+        $this->assertOutputModeContract($snapshot, $mode);
 
-        return $this->renderValidatedHtml($this->validatedSnapshot($snapshot));
+        return $this->renderValidatedHtml($this->validatedSnapshot($snapshot), $mode);
     }
 
     private function assertPrintOnlyContract(): void
@@ -52,11 +62,12 @@ class OfferDocumentRenderer
         }
     }
 
-    private function renderValidatedHtml(array $snapshot): string
+    private function renderValidatedHtml(array $snapshot, OfferDocumentOutputMode $mode): string
     {
         return view('pdf.offers.standard', [
             'snapshot' => $snapshot,
             'printCss' => File::get(resource_path('views/pdf/offers/print.css')),
+            'showDraftWatermark' => $mode === OfferDocumentOutputMode::Draft,
         ])->render();
     }
 
@@ -91,14 +102,22 @@ class OfferDocumentRenderer
         return $options;
     }
 
-    private function decoratePages(Dompdf $dompdf, array $snapshot): void
-    {
+    private function decoratePages(
+        Dompdf $dompdf,
+        array $snapshot,
+        OfferDocumentOutputMode $mode,
+        string $headerMode,
+    ): void {
         $canvas = $dompdf->getCanvas();
         $canvas->add_info('Title', $snapshot['document']['subject'].' - '.$snapshot['document']['number']);
         $canvas->add_info('Author', $snapshot['issuer']['name']);
-        $canvas->add_info('Subject', 'Draf dokumen penawaran jasa penilaian');
+        $canvas->add_info(
+            'Subject',
+            $mode === OfferDocumentOutputMode::Draft
+                ? 'Draf dokumen penawaran jasa penilaian'
+                : 'Dokumen penawaran jasa penilaian siap cetak',
+        );
 
-        $headerMode = (string) config('offer-documents.renderer.header_mode', 'odd_pages');
         $issuerName = $this->singleLine($snapshot['issuer']['name']);
         $issuerAddress = $this->singleLine(implode(' | ', $snapshot['issuer']['address_lines']));
         $issuerContact = $this->singleLine(implode(' | ', $snapshot['issuer']['contact_lines']));
@@ -155,6 +174,66 @@ class OfferDocumentRenderer
         });
     }
 
+    private function resolveHeaderMode(array $snapshot): string
+    {
+        $snapshotMode = $snapshot['metadata']['renderer_profile']['header_mode'] ?? null;
+
+        if (is_string($snapshotMode) && in_array($snapshotMode, self::HEADER_MODES, true)) {
+            return $snapshotMode;
+        }
+
+        $configuredMode = (string) config('offer-documents.renderer.header_mode', 'odd_pages');
+
+        return in_array($configuredMode, self::HEADER_MODES, true) ? $configuredMode : 'odd_pages';
+    }
+
+    private function assertOutputModeContract(array $snapshot, OfferDocumentOutputMode $mode): void
+    {
+        if ($mode !== OfferDocumentOutputMode::PrintReady) {
+            return;
+        }
+
+        $metadata = $snapshot['metadata'] ?? null;
+
+        if (! is_array($metadata)
+            || ($metadata['number_allocation']['status'] ?? null) !== 'allocated'
+            || ! $this->isApprovedMaster($metadata['template'] ?? null, true)
+            || ! $this->isApprovedMaster($metadata['issuer_profile'] ?? null)
+            || ! $this->isApprovedMaster($metadata['signer'] ?? null)
+            || ($metadata['uses_provisional_copy'] ?? true) !== false
+            || ($metadata['uses_provisional_issuer'] ?? true) !== false
+            || OfferDocumentContentGuard::containsProvisionalMarker([
+                $snapshot['document'] ?? null,
+                $snapshot['issuer'] ?? null,
+                $snapshot['recipient'] ?? null,
+                $snapshot['clauses'] ?? null,
+                $snapshot['signatures'] ?? null,
+            ])) {
+            throw new InvalidArgumentException(
+                'PDF siap cetak memerlukan nomor, template, profil penerbit, dan penandatangan resmi tanpa konten provisional.',
+            );
+        }
+    }
+
+    private function isApprovedMaster(mixed $master, bool $requiresActiveTemplate = false): bool
+    {
+        if (! is_array($master)
+            || ($master['status'] ?? null) !== 'approved'
+            || empty($master['approved_by'])
+            || empty($master['approved_at'])
+            || ($master['is_effective'] ?? false) !== true
+            || ($master['integrity_valid'] ?? false) !== true
+            || ! is_string($master['checksum'] ?? null)
+            || preg_match('/\A[a-f0-9]{64}\z/i', $master['checksum']) !== 1) {
+            return false;
+        }
+
+        return ! $requiresActiveTemplate || (
+            ($master['template_active'] ?? false) === true
+            && ($master['schema_valid'] ?? false) === true
+        );
+    }
+
     private function validatedSnapshot(array $snapshot): array
     {
         foreach (['document', 'issuer', 'recipient', 'clauses', 'signatures'] as $section) {
@@ -190,6 +269,8 @@ class OfferDocumentRenderer
                 'issuer_title',
                 'client_name',
             ], 'signatures'),
+            'issuer_permit_no' => $this->optionalString($snapshot['signatures']['issuer_permit_no'] ?? null, 'signatures.issuer_permit_no'),
+            'issuer_registration_no' => $this->optionalString($snapshot['signatures']['issuer_registration_no'] ?? null, 'signatures.issuer_registration_no'),
             'client_title' => $this->optionalString($snapshot['signatures']['client_title'] ?? null, 'signatures.client_title'),
         ];
 

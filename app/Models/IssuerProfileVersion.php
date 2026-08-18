@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasImmutableOfferDocumentApproval;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class IssuerProfileVersion extends Model
 {
+    use HasImmutableOfferDocumentApproval;
+
     protected $fillable = [
         'branch_id',
         'version_no',
@@ -24,7 +27,6 @@ class IssuerProfileVersion extends Model
         'effective_from',
         'effective_until',
         'status',
-        'checksum',
         'approved_by',
         'approved_at',
     ];
