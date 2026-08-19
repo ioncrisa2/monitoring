@@ -19,7 +19,7 @@
 | Pekerjaan & detail pekerjaan | Sebagian besar selesai | 90% | Daftar, detail, workflow stepper, tabs, timeline, SLA, PIC, aset, laporan, dokumen, dan tujuh modal sudah memakai foundation baru. Pemeriksaan visual/manual dan follow-up behavior masih tersisa. |
 | Master data & hak akses | Selesai secara implementasi | 95% | Cabang, debitur, organisasi/klien, pengguna, peran, dan permission sudah memakai pola tabel, filter, status, action, dan modal yang konsisten. |
 | Audit aktivitas & impor data | Selesai secara implementasi | 90% | Filter dan tabel audit serta alur unggah, staging, preview, dan proses impor sudah memakai foundation baru. Hardening backend impor masih terpisah. |
-| Welcome, autentikasi, profil, dan 403 | Selesai secara implementasi | 90% | Shell tamu, identitas aplikasi, seluruh account state, profil, danger zone, dan fallback 403 sudah distandardisasi. Keputusan registration/verification/self-delete masih terbuka. |
+| Welcome, autentikasi, profil, dan 403 | Selesai secara implementasi | 90% | Shell tamu, identitas aplikasi, seluruh account state, profil, danger zone, dan fallback 403 sudah distandardisasi. Registrasi publik sudah ditutup; keputusan verification/self-delete masih terbuka. |
 | Regresi otomatis | Selesai untuk cakupan redesign | 95% | Suite penuh lulus 86 test dan 604 assertion. Pemeriksaan browser visual, keyboard, dan screen reader tetap perlu dilakukan manual. |
 
 Persentase di atas adalah estimasi berdasarkan cakupan rencana pada dokumen ini, bukan hasil pengukuran otomatis.
@@ -293,7 +293,7 @@ Temuan berikut sengaja **tidak** dicampurkan ke commit visual karena membutuhkan
 
 - Kolom role pada User dan role Spatie masih menjadi dua sumber kebenaran; opsi role pada layar Pengguna juga masih hard-coded.
 - Login belum menolak user dengan status nonaktif.
-- Registrasi publik membuat user dengan string role default tetapi tidak meng-assign role Spatie, sehingga akun baru dapat diarahkan ke Dashboard lalu menerima 403.
+- Registrasi publik sudah ditutup; akun hanya dibuat dari menu Pengguna oleh pemilik permission `users.manage`.
 - Email verification memiliki route/screen, tetapi model User belum mengimplementasikan `MustVerifyEmail`.
 - Self-delete perlu keputusan produk, perlindungan last sysadmin, audit trail, dan penanganan foreign key record produksi.
 - Delete organisasi/debitur serta perubahan role perlu failure handling yang lebih ramah ketika terhalang relasi data.
@@ -310,7 +310,7 @@ Temuan berikut sengaja **tidak** dicampurkan ke commit visual karena membutuhkan
 
 #### Keputusan produk
 
-- Tentukan apakah registrasi publik tetap tersedia, hanya akun admin yang boleh membuat user, atau route `/register` harus ditutup.
+- Registrasi publik ditutup dan pembuatan akun dilakukan melalui menu Pengguna.
 - Tentukan apakah email verification benar-benar diwajibkan atau seluruh account state verifikasi dihapus.
 - Tentukan apakah self-service account deletion diizinkan pada aplikasi internal.
 - Tentukan apakah route `/` tetap menjadi welcome ringkas atau langsung mengarah ke Login.
@@ -354,7 +354,7 @@ Urutan lanjutan yang disarankan:
 
 1. Melakukan walkthrough browser pada lebar 360, 768, dan 1280 px untuk light/dark mode, termasuk overflow table, tab, dropdown, dan ketujuh modal pekerjaan.
 2. Menguji keyboard-only flow: skip link, sidebar/drawer, theme switcher, dropdown akun, tab, dialog focus trap/return, serta seluruh form utama.
-3. Memutuskan kebijakan registration, email verification, self-delete, dan perilaku route `/` sebelum mengubah routing atau lifecycle akun.
+3. Memutuskan kebijakan email verification, self-delete, dan perilaku route `/`; registrasi publik sudah ditutup.
 4. Menangani hardening authorization, branch isolation, transaction, idempotency, dan ownership batch sebagai fase backend terpisah.
 5. Menambah browser/visual/a11y automation bila diperlukan; test sekarang mengunci render, data, binding, action, dan semantic contract, bukan pixel rendering.
 6. Memverifikasi bahwa scaffold lama yang tidak lagi dipakai dapat dihapus: `resources/views/dashboard.blade.php`, `components/nav-link.blade.php`, dan `components/responsive-nav-link.blade.php`.
@@ -1231,7 +1231,7 @@ atau langsung:
 
 ## Register
 
-Jika akun dibuat oleh administrator, jangan tampilkan public registration.
+Akun dibuat oleh administrator; public registration tidak ditampilkan.
 
 Hapus:
 

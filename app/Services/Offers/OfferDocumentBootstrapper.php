@@ -2,6 +2,8 @@
 
 namespace App\Services\Offers;
 
+use App\Enums\OfferDocumentVersionState;
+use App\Enums\OfferFeePresentation;
 use App\Enums\OfferTaxInclusion;
 use App\Enums\OfferWorkflowState;
 use App\Models\DocumentSignerVersion;
@@ -9,6 +11,7 @@ use App\Models\IssuerProfileVersion;
 use App\Models\Offer;
 use App\Models\OfferAsset;
 use App\Models\OfferAssetDocument;
+use App\Models\OfferDocumentVersion;
 use App\Models\OfferEngagement;
 use App\Models\OfferFeeItem;
 use App\Models\OfferPaymentTerm;
@@ -41,7 +44,10 @@ class OfferDocumentBootstrapper
 
     public const EMPHASIS_STYLES = ['normal', 'bold', 'italic', 'underline'];
 
-    public function __construct(private readonly OfferNumberAllocator $numberAllocator) {}
+    public function __construct(
+        private readonly OfferNumberAllocator $numberAllocator,
+        private readonly OfferDocumentMasterIntegrityService $masterIntegrity,
+    ) {}
 
     /**
      * Load persisted draft data or non-persisted compatibility defaults for a legacy Offer.
@@ -124,6 +130,28 @@ class OfferDocumentBootstrapper
                 throw new DomainException('Draft telah berubah di sesi lain. Muat ulang sebelum menyimpan.');
             }
 
+            if ($existingEngagement?->current_review_version_id !== null) {
+                $reviewVersion = OfferDocumentVersion::query()
+                    ->whereKey($existingEngagement->current_review_version_id)
+                    ->where('offer_id', $lockedOffer->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($reviewVersion instanceof OfferDocumentVersion
+                    && in_array($reviewVersion->version_state, [
+                        OfferDocumentVersionState::InReview,
+                        OfferDocumentVersionState::Approved,
+                    ], true)) {
+                    DB::table('offer_document_versions')
+                        ->where('id', $reviewVersion->getKey())
+                        ->update([
+                            'version_state' => OfferDocumentVersionState::Superseded->value,
+                            'lock_version' => DB::raw('lock_version + 1'),
+                            'updated_at' => now(),
+                        ]);
+                }
+            }
+
             $engagementData = $this->normalizeEngagement(
                 $lockedOffer,
                 $existingEngagement,
@@ -193,31 +221,46 @@ class OfferDocumentBootstrapper
         $signerVersionId = $this->nullableId($source['signer_version_id'] ?? null, 'Versi penandatangan');
 
         if ($templateVersionId !== null) {
-            if (! OfferTemplateVersion::query()->whereKey($templateVersionId)->exists()) {
+            $templateVersion = OfferTemplateVersion::query()
+                ->with('template')
+                ->whereKey($templateVersionId)
+                ->first();
+
+            if (! $templateVersion instanceof OfferTemplateVersion) {
                 throw new DomainException('Versi template tidak ditemukan.');
+            }
+
+            $this->assertSelectableMaster($templateVersion, $offer);
+
+            if ($templateVersion->template?->active !== true) {
+                throw new DomainException('Template penawaran tidak aktif.');
             }
         }
 
         if ($issuerProfileVersionId !== null) {
-            $exists = IssuerProfileVersion::query()
+            $issuer = IssuerProfileVersion::query()
                 ->whereKey($issuerProfileVersionId)
                 ->where('branch_id', $offer->branch_id)
-                ->exists();
+                ->first();
 
-            if (! $exists) {
+            if (! $issuer instanceof IssuerProfileVersion) {
                 throw new DomainException('Profil penerbit tidak berada dalam scope cabang penawaran.');
             }
+
+            $this->assertSelectableMaster($issuer, $offer);
         }
 
         if ($signerVersionId !== null) {
-            $exists = DocumentSignerVersion::query()
+            $signer = DocumentSignerVersion::query()
                 ->whereKey($signerVersionId)
                 ->where('branch_id', $offer->branch_id)
-                ->exists();
+                ->first();
 
-            if (! $exists) {
+            if (! $signer instanceof DocumentSignerVersion) {
                 throw new DomainException('Penandatangan tidak berada dalam scope cabang penawaran.');
             }
+
+            $this->assertSelectableMaster($signer, $offer);
         }
 
         return [
@@ -278,6 +321,11 @@ class OfferDocumentBootstrapper
                 $source['tax_inclusion'] ?? null,
                 array_column(OfferTaxInclusion::cases(), 'value'),
                 'Mode pajak',
+            ),
+            'fee_presentation' => $this->oneOf(
+                $source['fee_presentation'] ?? OfferFeePresentation::LumpSum->value,
+                array_column(OfferFeePresentation::cases(), 'value'),
+                'Penyajian fee',
             ),
             'ppn_rate_bps' => $this->nullableRate($source['ppn_rate_bps'] ?? null, 'Tarif PPN'),
             'pph_rate_bps' => $this->nullableRate($source['pph_rate_bps'] ?? null, 'Tarif PPh'),
@@ -387,6 +435,25 @@ class OfferDocumentBootstrapper
                     self::MAX_AREA_M2,
                 ),
                 'inspection_note' => $this->nullableString($row['inspection_note'] ?? null),
+                'exposure_amount' => $this->nullableBoundedNonNegativeInteger(
+                    $row['exposure_amount'] ?? null,
+                    999_999_999_999_999,
+                    'Exposure aset',
+                ),
+                'reference_market_value' => $this->nullableBoundedNonNegativeInteger(
+                    $row['reference_market_value'] ?? null,
+                    999_999_999_999_999,
+                    'Referensi Nilai Pasar aset',
+                ),
+                'reference_liquidation_value' => $this->nullableBoundedNonNegativeInteger(
+                    $row['reference_liquidation_value'] ?? null,
+                    999_999_999_999_999,
+                    'Referensi Nilai Likuidasi aset',
+                ),
+                'liquidation_discount_bps' => $this->nullableRate(
+                    $row['liquidation_discount_bps'] ?? null,
+                    'Diskon likuidasi aset',
+                ),
                 'sort_order' => $sortOrder,
             ])->save();
             $kept[] = $asset->getKey();
@@ -634,6 +701,7 @@ class OfferDocumentBootstrapper
             'completion_days' => null,
             'completion_day_type' => null,
             'tax_inclusion' => null,
+            'fee_presentation' => OfferFeePresentation::LumpSum->value,
             'ppn_rate_bps' => 1100,
             'pph_rate_bps' => 200,
             'cost_inclusions' => [],
@@ -674,6 +742,7 @@ class OfferDocumentBootstrapper
             'completion_days' => $engagement->completion_days,
             'completion_day_type' => $engagement->completion_day_type,
             'tax_inclusion' => $engagement->tax_inclusion?->value,
+            'fee_presentation' => $engagement->fee_presentation?->value ?? OfferFeePresentation::LumpSum->value,
             'ppn_rate_bps' => $engagement->ppn_rate_bps,
             'pph_rate_bps' => $engagement->pph_rate_bps,
             'cost_inclusions' => $engagement->cost_inclusions ?? [],
@@ -746,6 +815,10 @@ class OfferDocumentBootstrapper
             'land_area_m2' => $asset->land_area_m2,
             'building_area_m2' => $asset->building_area_m2,
             'inspection_note' => $asset->inspection_note,
+            'exposure_amount' => $asset->exposure_amount,
+            'reference_market_value' => $asset->reference_market_value,
+            'reference_liquidation_value' => $asset->reference_liquidation_value,
+            'liquidation_discount_bps' => $asset->liquidation_discount_bps,
             'sort_order' => $asset->sort_order,
             'documents' => $asset->documents
                 ->map(fn (OfferAssetDocument $document): array => [
@@ -1073,5 +1146,21 @@ class OfferDocumentBootstrapper
         }
 
         return $items;
+    }
+
+    private function assertSelectableMaster(
+        OfferTemplateVersion|IssuerProfileVersion|DocumentSignerVersion $master,
+        Offer $offer,
+    ): void {
+        $this->masterIntegrity->assertApprovedIntegrity($master);
+        $effectiveOn = $offer->offer_date ?? now();
+
+        if ($master->effective_from === null || $master->effective_from->gt($effectiveOn)) {
+            throw new DomainException('Master dokumen belum berlaku pada tanggal penawaran.');
+        }
+
+        if ($master->effective_until !== null && $master->effective_until->lt($effectiveOn)) {
+            throw new DomainException('Master dokumen sudah tidak berlaku pada tanggal penawaran.');
+        }
     }
 }

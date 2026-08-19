@@ -17,6 +17,7 @@ use App\Services\OfferNumberService;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
@@ -309,7 +310,7 @@ class DatabaseSeeder extends Seeder
                 'from_status' => null,
                 'to_status' => 'PERSIAPAN',
                 'changed_by' => $changedBy->id,
-                'note' => 'Pekerjaan dibuat dari penawaran ' . $offer->offer_no,
+                'note' => 'Pekerjaan dibuat dari penawaran '.$offer->offer_no,
             ]);
             $history->created_at = $contractDate;
             $history->updated_at = $contractDate;
@@ -346,7 +347,7 @@ class DatabaseSeeder extends Seeder
                 'work_order_id' => $wo->id,
                 'title' => $title,
                 'type' => $type,
-                'file_path' => 'documents/work_orders/' . \Illuminate\Support\Str::slug($title) . '.pdf',
+                'file_path' => 'documents/work_orders/'.Str::slug($title).'.pdf',
                 'file_size' => random_int(150_000, 3_200_000),
                 'uploaded_by' => $uploader->id,
             ]);
@@ -383,13 +384,13 @@ class DatabaseSeeder extends Seeder
             'report_id' => $report1->id,
             'sent_date' => $off1->offer_date->copy()->addDays(22),
             'courier' => 'JNE',
-            'tracking_no' => 'JNE-' . strtoupper(uniqid()),
+            'tracking_no' => 'JNE-'.strtoupper(uniqid()),
             'received_date' => $off1->offer_date->copy()->addDays(24),
             'recipient_name' => 'Bagian Legal Bank Mandiri',
             'note' => 'Diterima lengkap oleh bagian legal',
         ]);
-        $addDocument($wo1, 'Surat Penawaran & Kontrak - ' . $wo1->contract_no, 'penawaran', $opJkt);
-        $addDocument($wo1, 'Scan Laporan Final - ' . $wo1->contract_no, 'scan_final', $reviewer1);
+        $addDocument($wo1, 'Surat Penawaran & Kontrak - '.$wo1->contract_no, 'penawaran', $opJkt);
+        $addDocument($wo1, 'Scan Laporan Final - '.$wo1->contract_no, 'scan_final', $reviewer1);
 
         // WO2 (Offer 2, JKT): full pipeline -> SELESAI, laporan terbit & terkirim
         $wo2 = $startWorkOrder($off2, $off2->offer_date, $opJkt, [
@@ -422,13 +423,13 @@ class DatabaseSeeder extends Seeder
             'report_id' => $report2->id,
             'sent_date' => $off2->offer_date->copy()->addDays(20),
             'courier' => 'TIKI',
-            'tracking_no' => 'TIKI-' . strtoupper(uniqid()),
+            'tracking_no' => 'TIKI-'.strtoupper(uniqid()),
             'received_date' => $off2->offer_date->copy()->addDays(23),
             'recipient_name' => 'Bagian Legal Bank BCA',
             'note' => null,
         ]);
-        $addDocument($wo2, 'Surat Penawaran & Kontrak - ' . $wo2->contract_no, 'penawaran', $opJkt);
-        $addDocument($wo2, 'Scan Laporan Final - ' . $wo2->contract_no, 'scan_final', $reviewer2);
+        $addDocument($wo2, 'Surat Penawaran & Kontrak - '.$wo2->contract_no, 'penawaran', $opJkt);
+        $addDocument($wo2, 'Scan Laporan Final - '.$wo2->contract_no, 'scan_final', $reviewer2);
 
         // WO3 (Offer 3, SUB): dibatalkan sebelum pekerjaan berjalan
         $wo3 = $startWorkOrder($off3, $off3->offer_date, $sysAdmin, [
@@ -462,8 +463,8 @@ class DatabaseSeeder extends Seeder
             'created_by' => $reviewer2->id,
         ]);
         $report4->assets()->sync([$asset4a->id, $asset4b->id]);
-        $addDocument($wo4, 'Surat Penawaran & Kontrak - ' . $wo4->contract_no, 'penawaran', $opJkt);
-        $addDocument($wo4, 'Draft Laporan - ' . $wo4->contract_no, 'draft_laporan', $reviewer2);
+        $addDocument($wo4, 'Surat Penawaran & Kontrak - '.$wo4->contract_no, 'penawaran', $opJkt);
+        $addDocument($wo4, 'Draft Laporan - '.$wo4->contract_no, 'draft_laporan', $reviewer2);
 
         // WO5 (Offer 9, BDG): sedang REVIEW, laporan belum diterbitkan
         $wo5 = $startWorkOrder($off9, $off9->offer_date, $opBdg, [
@@ -476,7 +477,7 @@ class DatabaseSeeder extends Seeder
         $advanceStatus($wo5, 'SURVEY', 'PENGERJAAN', $surveyor2, $off9->offer_date->copy()->addDays(9), 'Survey selesai, masuk pengolahan data');
         $advanceStatus($wo5, 'PENGERJAAN', 'REVIEW', $reviewer1, $off9->offer_date->copy()->addDays(17), 'Draft laporan diserahkan ke reviewer');
         $addAsset($wo5, 'tanah_bangunan', 'Jl. Ir. H. Djuanda No. 12', 'Bandung', 'Jawa Barat', 'Rumah tinggal 2 lantai');
-        $addDocument($wo5, 'Foto & Data Survey Lapangan - ' . $wo5->contract_no, 'survey', $surveyor2);
+        $addDocument($wo5, 'Foto & Data Survey Lapangan - '.$wo5->contract_no, 'survey', $surveyor2);
 
         // WO6 (Offer 11, PST): PENGERJAAN, SLA overdue (demo red-flag)
         $wo6 = $startWorkOrder($off11, $off11->offer_date, $supervisor, [
@@ -504,5 +505,6 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call(RolePermissionSeeder::class);
+        $this->call(OfferDocumentTemplateSeeder::class);
     }
 }

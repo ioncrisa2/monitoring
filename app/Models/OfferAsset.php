@@ -18,6 +18,10 @@ class OfferAsset extends Model
         'land_area_m2',
         'building_area_m2',
         'inspection_note',
+        'exposure_amount',
+        'reference_market_value',
+        'reference_liquidation_value',
+        'liquidation_discount_bps',
         'sort_order',
     ];
 
@@ -26,6 +30,10 @@ class OfferAsset extends Model
         return [
             'land_area_m2' => 'decimal:2',
             'building_area_m2' => 'decimal:2',
+            'exposure_amount' => 'integer',
+            'reference_market_value' => 'integer',
+            'reference_liquidation_value' => 'integer',
+            'liquidation_discount_bps' => 'integer',
             'sort_order' => 'integer',
         ];
     }

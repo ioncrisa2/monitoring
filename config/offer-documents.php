@@ -1,6 +1,12 @@
 <?php
 
 return [
+    'features' => [
+        // Keep final artifact generation closed until official masters,
+        // golden renders, and print UAT have all been accepted.
+        'finalization_enabled' => (bool) env('OFFER_DOCUMENT_FINALIZATION_ENABLED', false),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Output contract

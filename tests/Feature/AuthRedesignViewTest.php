@@ -23,11 +23,12 @@ class AuthRedesignViewTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
+            ->assertSee('HJAR Flows')
+            ->assertSeeHtml('class="app-logo')
             ->assertSee('Satu tempat untuk memantau pekerjaan penilaian.')
             ->assertSeeHtml('href="'.route('login').'"')
             ->assertSee('Masuk ke sistem')
-            ->assertSeeHtml('href="'.route('register').'"')
-            ->assertSee('Daftar akun');
+            ->assertDontSee('Daftar akun');
 
         $user = User::factory()->create(['role' => 'admin']);
 
@@ -37,6 +38,9 @@ class AuthRedesignViewTest extends TestCase
             ->assertSeeHtml('href="'.route('dashboard').'"')
             ->assertSee('Buka dashboard')
             ->assertDontSee('Masuk ke sistem');
+
+        $this->assertFileExists(public_path('brand/hjar-flows-on-light.png'));
+        $this->assertFileExists(public_path('brand/hjar-flows-on-dark.png'));
     }
 
     public function test_login_route_renders_heading_bindings_action_and_loading_hook_for_guests(): void
@@ -51,21 +55,6 @@ class AuthRedesignViewTest extends TestCase
             ->assertSeeHtml('wire:model="form.remember"')
             ->assertSeeHtml('wire:loading.attr="disabled"')
             ->assertSeeHtml('wire:target="login"');
-    }
-
-    public function test_register_route_renders_heading_bindings_action_and_loading_hook_for_guests(): void
-    {
-        $this->get(route('register'))
-            ->assertOk()
-            ->assertSeeVolt('pages.auth.register')
-            ->assertSee('Buat Akun')
-            ->assertSeeHtml('wire:submit="register"')
-            ->assertSeeHtml('wire:model="name"')
-            ->assertSeeHtml('wire:model="email"')
-            ->assertSeeHtml('wire:model="password"')
-            ->assertSeeHtml('wire:model="password_confirmation"')
-            ->assertSeeHtml('wire:loading.attr="disabled"')
-            ->assertSeeHtml('wire:target="register"');
     }
 
     public function test_forgot_password_route_renders_heading_binding_action_and_loading_hook_for_guests(): void

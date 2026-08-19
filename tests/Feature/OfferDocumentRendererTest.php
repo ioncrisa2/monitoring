@@ -22,6 +22,9 @@ class OfferDocumentRendererTest extends TestCase
         $this->assertStringContainsString('DRAF — BELUM DISETUJUI', $html);
         $this->assertStringContainsString('@page :odd', $html);
         $this->assertStringContainsString('@page :even', $html);
+        $this->assertStringContainsString('margin: 36mm 20mm 18mm', $html);
+        $this->assertSame(25, substr_count($html, '<colgroup>'));
+        $this->assertStringContainsString('<col width="62%" style="width: 62%">', $html);
         $this->assertSame(25, substr_count($html, 'data-clause-key='));
         $this->assertStringContainsString('PT Contoh &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;', $html);
         $this->assertStringNotContainsString('<script>alert("x")</script>', $html);
@@ -194,7 +197,7 @@ class OfferDocumentRendererTest extends TestCase
     public function test_print_ready_rejects_provisional_snapshot_metadata(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('memerlukan nomor, template, profil penerbit, dan penandatangan resmi');
+        $this->expectExceptionMessage('memerlukan nomor, template, profil penerbit, letterhead resmi, dan penandatangan resmi');
 
         app(OfferDocumentRenderer::class)->renderHtml(
             $this->draftSnapshot(),

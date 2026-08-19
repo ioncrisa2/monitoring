@@ -3,12 +3,49 @@
 namespace App\Models;
 
 use App\Enums\OfferDocumentVersionState;
+use DomainException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OfferDocumentVersion extends Model
 {
+    protected static function booted(): void
+    {
+        static::updating(function (self $version): void {
+            foreach ([
+                'offer_id',
+                'version_no',
+                'template_version_id',
+                'issuer_profile_version_id',
+                'signer_version_id',
+                'data_snapshot',
+                'snapshot_sha256',
+                'submitted_by',
+                'submitted_at',
+                'supersedes_id',
+            ] as $immutableAttribute) {
+                if ($version->isDirty($immutableAttribute)) {
+                    throw new DomainException('Snapshot versi dokumen bersifat immutable; buat versi baru untuk perubahan.');
+                }
+            }
+
+            if (in_array($version->getRawOriginal('version_state'), [
+                OfferDocumentVersionState::Finalized->value,
+                OfferDocumentVersionState::Superseded->value,
+                OfferDocumentVersionState::Void->value,
+            ], true)) {
+                throw new DomainException('Versi dokumen yang telah ditutup bersifat immutable.');
+            }
+
+            throw new DomainException('Arsip versi dokumen hanya dapat berubah melalui layanan workflow resmi.');
+        });
+
+        static::deleting(function (): void {
+            throw new DomainException('Arsip versi dokumen tidak dapat dihapus.');
+        });
+    }
+
     protected $fillable = [
         'offer_id',
         'version_no',

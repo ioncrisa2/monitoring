@@ -10,6 +10,8 @@
         <div class="draft-watermark">DRAF — BELUM DISETUJUI</div>
     @endif
 
+    @include('pdf.offers.partials.letterhead')
+
     <main>
         @include('pdf.offers.partials.letter-meta')
         @include('pdf.offers.partials.recipient')

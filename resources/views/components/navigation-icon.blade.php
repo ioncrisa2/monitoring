@@ -20,6 +20,9 @@
         @case('branch')
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M6 21V5a2 2 0 012-2h8a2 2 0 012 2v16M3 21h18M9 7h1m4 0h1M9 11h1m4 0h1M9 15h6v6" />
             @break
+        @case('document-master')
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M6 3h8l4 4v14H6a2 2 0 01-2-2V5a2 2 0 012-2Zm8 0v5h5M8 12h6m-6 4h4m7-3v7m-3.5-3.5h7" />
+            @break
         @case('users')
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m7-10a4 4 0 100-8 4 4 0 000 8zm13 10v-2a4 4 0 00-3-3.87m-2-11.96a4 4 0 010 7.75" />
             @break

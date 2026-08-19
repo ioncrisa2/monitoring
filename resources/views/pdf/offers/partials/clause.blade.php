@@ -1,23 +1,24 @@
 <article class="clause" data-clause-key="{{ $clause['key'] }}">
-    @foreach ($clause['paragraphs'] as $paragraph)
-        <table class="clause-block" role="presentation">
-            <tr>
-                <td class="clause-number">{{ $loop->first ? $clause['number'].'.' : '' }}</td>
-                <td class="clause-title">{{ $loop->first ? $clause['title'] : '' }}</td>
-                <td class="clause-colon">{{ $loop->first ? ':' : '' }}</td>
-                <td class="clause-content"><p>{{ $paragraph }}</p></td>
+    <table class="clause-block" role="presentation">
+        <colgroup>
+            <col width="5%" style="width: 5%">
+            <col width="30%" style="width: 30%">
+            <col width="3%" style="width: 3%">
+            <col width="62%" style="width: 62%">
+        </colgroup>
+        <tbody>
+            <tr class="clause-row">
+                <td width="5%" class="clause-number">{{ $clause['number'] }}.</td>
+                <td width="30%" class="clause-title">{{ $clause['title'] }}</td>
+                <td width="3%" class="clause-colon">:</td>
+                <td width="62%" class="clause-content">
+                    @foreach ($clause['blocks'] as $block)
+                        <div class="clause-content-block block-{{ $block['type'] }}">
+                        @include('pdf.offers.partials.block', ['block' => $block])
+                        </div>
+                    @endforeach
+                </td>
             </tr>
-        </table>
-    @endforeach
-
-    @foreach ($clause['items'] as $item)
-        <table class="clause-block" role="presentation">
-            <tr>
-                <td class="clause-number">{{ $clause['paragraphs'] === [] && $loop->first ? $clause['number'].'.' : '' }}</td>
-                <td class="clause-title">{{ $clause['paragraphs'] === [] && $loop->first ? $clause['title'] : '' }}</td>
-                <td class="clause-colon">{{ $clause['paragraphs'] === [] && $loop->first ? ':' : '' }}</td>
-                <td class="clause-content clause-list-item"><span class="bullet">•</span><span>{{ $item }}</span></td>
-            </tr>
-        </table>
-    @endforeach
+        </tbody>
+    </table>
 </article>

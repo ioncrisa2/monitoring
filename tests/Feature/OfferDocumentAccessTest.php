@@ -9,6 +9,7 @@ use App\Models\Debtor;
 use App\Models\DocumentSignerVersion;
 use App\Models\IssuerProfileVersion;
 use App\Models\Offer;
+use App\Models\OfferDocumentVersion;
 use App\Models\OfferTemplate;
 use App\Models\OfferTemplateVersion;
 use App\Models\Organization;
@@ -17,14 +18,15 @@ use App\Policies\OfferPolicy;
 use App\Services\Offers\OfferDocumentBootstrapper;
 use App\Services\Offers\OfferDocumentMasterApprovalService;
 use App\Services\Offers\OfferDocumentRenderer;
+use App\Services\Offers\OfferDocumentWorkflowService;
+use Database\Seeders\OfferDocumentTemplateSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use InvalidArgumentException;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Mockery\MockInterface;
-use RuntimeException;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -150,19 +152,18 @@ class OfferDocumentAccessTest extends TestCase
             ->assertHeader('x-content-type-options', 'nosniff');
         $this->assertStringStartsWith('%PDF-', $response->getContent());
 
-        $disposition = (string) $response->headers->get('content-disposition');
-        $this->assertStringStartsWith('attachment; filename="penawaran-', $disposition);
-        $this->assertStringEndsWith('.pdf"', $disposition);
-        $this->assertStringNotContainsString('-draft.pdf', $disposition);
+        $this->assertSame(
+            "attachment; filename=\"Penawaran-1-S.Kontrak-KJPP-HJA'R-10-VIII-2026-v1.pdf\"",
+            (string) $response->headers->get('content-disposition'),
+        );
         $this->assertDatabaseHas('activity_logs', [
             'user_id' => $supervisor->id,
-            'action' => 'GENERATE_PRINT_READY',
-            'model_type' => 'Offer',
-            'model_id' => $this->jakartaOffer->id,
+            'action' => 'DOWNLOAD_PRINT_READY',
+            'model_type' => 'OfferDocumentArtifact',
         ]);
     }
 
-    public function test_print_ready_rejects_master_content_tampered_outside_the_approval_workflow(): void
+    public function test_print_ready_downloads_the_archived_final_even_if_live_master_later_changes(): void
     {
         $supervisor = User::factory()->create([
             'branch_id' => $this->jakarta->id,
@@ -183,17 +184,16 @@ class OfferDocumentAccessTest extends TestCase
 
         $this->actingAs($supervisor)
             ->get(route('offers.documents.print-ready', $this->jakartaOffer))
-            ->assertStatus(422)
-            ->assertHeaderMissing('content-disposition');
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
 
-        $this->assertDatabaseMissing('activity_logs', [
+        $this->assertDatabaseHas('activity_logs', [
             'user_id' => $supervisor->id,
-            'action' => 'GENERATE_PRINT_READY',
-            'model_id' => $this->jakartaOffer->id,
+            'action' => 'DOWNLOAD_PRINT_READY',
         ]);
     }
 
-    public function test_print_ready_translates_only_renderer_contract_failures_to_a_generic_422(): void
+    public function test_print_ready_download_never_calls_the_renderer_again(): void
     {
         $supervisor = User::factory()->create([
             'branch_id' => $this->jakarta->id,
@@ -201,49 +201,39 @@ class OfferDocumentAccessTest extends TestCase
         ]);
         $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
         $this->mock(OfferDocumentRenderer::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('render')
-                ->once()
-                ->andThrow(new InvalidArgumentException('detail internal renderer'));
+            $mock->shouldNotReceive('render');
         });
 
         $this->actingAs($supervisor)
             ->get(route('offers.documents.print-ready', $this->jakartaOffer))
-            ->assertStatus(422);
+            ->assertOk();
 
-        $this->assertDatabaseMissing('activity_logs', [
+        $this->assertDatabaseHas('activity_logs', [
             'user_id' => $supervisor->id,
-            'action' => 'GENERATE_PRINT_READY',
-            'model_id' => $this->jakartaOffer->id,
+            'action' => 'DOWNLOAD_PRINT_READY',
         ]);
     }
 
-    public function test_print_ready_does_not_swallow_unexpected_renderer_failures(): void
+    public function test_print_ready_rejects_a_tampered_private_artifact(): void
     {
         $supervisor = User::factory()->create([
             'branch_id' => $this->jakarta->id,
             'role' => 'supervisor',
         ]);
         $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
-        $this->mock(OfferDocumentRenderer::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('render')
-                ->once()
-                ->andThrow(new RuntimeException('renderer gagal'));
-        });
+        $artifact = $this->jakartaOffer->fresh()->engagement->currentFinalVersion->artifacts()
+            ->where('artifact_type', 'final')
+            ->firstOrFail();
+        Storage::disk('local')->put($artifact->file_path, '%PDF-tampered');
 
-        $this->withoutExceptionHandling();
-
-        try {
-            $this->actingAs($supervisor)
-                ->get(route('offers.documents.print-ready', $this->jakartaOffer));
-            $this->fail('Kegagalan renderer yang tidak terduga seharusnya diteruskan.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame('renderer gagal', $exception->getMessage());
-        }
+        $this->actingAs($supervisor)
+            ->get(route('offers.documents.print-ready', $this->jakartaOffer))
+            ->assertStatus(409);
 
         $this->assertDatabaseMissing('activity_logs', [
             'user_id' => $supervisor->id,
-            'action' => 'GENERATE_PRINT_READY',
-            'model_id' => $this->jakartaOffer->id,
+            'action' => 'DOWNLOAD_PRINT_READY',
+            'model_id' => $artifact->id,
         ]);
     }
 
@@ -258,9 +248,9 @@ class OfferDocumentAccessTest extends TestCase
 
         Livewire::actingAs($supervisor)
             ->test(DocumentEditor::class, ['offer' => $this->jakartaOffer->fresh()])
-            ->assertSet('printReadyEligible', false)
+            ->assertSet('printReadyEligible', true)
             ->assertSee('Periksa PDF siap cetak')
-            ->assertDontSeeHtml('href="'.$downloadUrl.'"')
+            ->assertSeeHtml('href="'.$downloadUrl.'"')
             ->call('checkPrintReady')
             ->assertSet('preflight.errors', [])
             ->assertSet('printReadyEligible', true)
@@ -276,7 +266,7 @@ class OfferDocumentAccessTest extends TestCase
         ]);
         $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
         $this->mock(OfferDocumentRenderer::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('render')->times(10)->andReturn('%PDF-test');
+            $mock->shouldNotReceive('render');
         });
 
         $this->actingAs($supervisor);
@@ -286,7 +276,67 @@ class OfferDocumentAccessTest extends TestCase
         }
 
         $this->get(route('offers.documents.print-ready', $this->jakartaOffer))->assertTooManyRequests();
-        $this->assertDatabaseCount('activity_logs', 10);
+        $this->assertSame(10, DB::table('activity_logs')->where('action', 'DOWNLOAD_PRINT_READY')->count());
+    }
+
+    public function test_finalization_is_idempotent_and_keeps_one_final_artifact(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $version = $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+        $first = $version->fresh()->artifacts()->where('artifact_type', 'final')->firstOrFail();
+        $second = app(OfferDocumentWorkflowService::class)->finalize($version->fresh(), $supervisor);
+
+        $this->assertSame($first->getKey(), $second->getKey());
+        $this->assertSame(1, $version->artifacts()->where('artifact_type', 'final')->count());
+    }
+
+    public function test_review_rejects_a_live_draft_changed_after_submission(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $version = $this->makePrintReady(
+            $this->jakartaOffer,
+            $this->jakarta,
+            $supervisor,
+            approve: false,
+            finalize: false,
+        );
+        $submitter = $version->submitter;
+        $draft = app(OfferDocumentBootstrapper::class)->loadForm($this->jakartaOffer->fresh());
+        $draft['engagement']['internal_note'] = 'Data berubah setelah snapshot diajukan.';
+        app(OfferDocumentBootstrapper::class)->saveDraft($this->jakartaOffer->fresh(), $draft, $submitter);
+
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage('bukan lagi snapshot aktif');
+        app(OfferDocumentWorkflowService::class)->approve($version->fresh(), $supervisor);
+    }
+
+    public function test_historical_final_artifact_download_is_private_and_branch_scoped(): void
+    {
+        $supervisor = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $version = $this->makePrintReady($this->jakartaOffer, $this->jakarta, $supervisor);
+        $artifact = $version->fresh()->artifacts()->where('artifact_type', 'final')->firstOrFail();
+        $url = route('offers.documents.artifacts.download', [$this->jakartaOffer, $version, $artifact]);
+
+        auth()->logout();
+        $this->get($url)->assertRedirect(route('login'));
+
+        $foreignSupervisor = User::factory()->create([
+            'branch_id' => $this->surabaya->id,
+            'role' => 'supervisor',
+        ]);
+        $this->actingAs($foreignSupervisor)->get($url)->assertForbidden();
+        $this->actingAs($supervisor)->get($url)
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
     }
 
     public function test_cross_branch_permission_alone_does_not_grant_document_access(): void
@@ -362,6 +412,72 @@ class OfferDocumentAccessTest extends TestCase
         $this->assertEquals($original, $this->jakartaOffer->fresh()->only($trackedFields));
     }
 
+    public function test_template_switch_applies_business_defaults_and_preserves_offer_specific_data(): void
+    {
+        $this->seed(OfferDocumentTemplateSeeder::class);
+        $author = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'sysadmin',
+        ]);
+        $reviewer = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'supervisor',
+        ]);
+        $approval = app(OfferDocumentMasterApprovalService::class);
+
+        foreach (OfferTemplateVersion::query()->with('template')->get() as $version) {
+            $version->forceFill([
+                'effective_from' => $this->jakartaOffer->offer_date->copy()->subDays(10),
+                'effective_until' => $version->template->code === 'property-rental'
+                    ? $this->jakartaOffer->offer_date->copy()->subDays(2)
+                    : null,
+                'created_by' => $author->getKey(),
+            ])->save();
+            $approval->approve($approval->submit($version, $author), $reviewer);
+        }
+
+        $collateral = OfferTemplateVersion::query()
+            ->whereHas('template', fn ($query) => $query->where('code', 'property-collateral'))
+            ->sole();
+        $auction = OfferTemplateVersion::query()
+            ->whereHas('template', fn ($query) => $query->where('code', 'property-auction'))
+            ->sole();
+        $expiredRental = OfferTemplateVersion::query()
+            ->whereHas('template', fn ($query) => $query->where('code', 'property-rental'))
+            ->sole();
+        $admin = User::factory()->create([
+            'branch_id' => $this->jakarta->id,
+            'role' => 'admin',
+        ]);
+
+        $component = Livewire::actingAs($admin)
+            ->test(DocumentEditor::class, ['offer' => $this->jakartaOffer])
+            ->call('selectTemplate', $collateral->getKey())
+            ->set('draft.engagement.recipient_organization', 'PT Penerima Tetap')
+            ->set('draft.engagement.internal_note', 'Catatan internal tetap')
+            ->call('addAsset', 0)
+            ->set('draft.subjects.0.assets.0.description', 'Aset tetap saat template diganti')
+            ->set('draft.subjects.0.assets.0.documents.0.document_type', 'SHM')
+            ->set('draft.subjects.0.assets.0.documents.0.document_no', '123/ANONIM')
+            ->set('draft.fee_items.0.unit_amount', 12_345_678)
+            ->call('selectTemplate', $auction->getKey())
+            ->assertHasNoErrors()
+            ->assertSet('draft.engagement.template_version_id', $auction->getKey())
+            ->assertSet('draft.engagement.purpose', 'Pelaksanaan lelang')
+            ->assertSet('draft.engagement.valuation_basis', 'Nilai Pasar dan Nilai Likuidasi')
+            ->assertSet('draft.engagement.fee_presentation', 'per_asset')
+            ->assertSet('draft.engagement.recipient_organization', 'PT Penerima Tetap')
+            ->assertSet('draft.engagement.internal_note', 'Catatan internal tetap')
+            ->assertSet('draft.subjects.0.assets.0.description', 'Aset tetap saat template diganti')
+            ->assertSet('draft.subjects.0.assets.0.documents.0.document_no', '123/ANONIM')
+            ->assertSet('draft.fee_items.0.unit_amount', 12_345_678);
+
+        $component
+            ->call('selectTemplate', $expiredRental->getKey())
+            ->assertHasErrors('draft.engagement.template_version_id')
+            ->assertSet('draft.engagement.template_version_id', $auction->getKey());
+    }
+
     public function test_view_only_user_can_read_editor_but_cannot_run_mutating_actions(): void
     {
         $viewer = User::factory()->create([
@@ -424,8 +540,8 @@ class OfferDocumentAccessTest extends TestCase
             ->assertHeader('content-type', 'application/pdf')
             ->assertHeader('cache-control', 'max-age=0, no-store, private');
         $this->assertStringStartsWith('%PDF-', $preview->getContent());
-        $this->assertStringStartsWith(
-            'inline; filename="penawaran-',
+        $this->assertSame(
+            "inline; filename=\"Penawaran-1-S.Kontrak-KJPP-HJA'R-10-VIII-2026.pdf\"",
             (string) $preview->headers->get('content-disposition'),
         );
 
@@ -437,11 +553,10 @@ class OfferDocumentAccessTest extends TestCase
             ->assertHeader('cache-control', 'max-age=0, no-store, private')
             ->assertHeader('x-content-type-options', 'nosniff');
         $this->assertStringStartsWith('%PDF-', $download->getContent());
-        $this->assertStringStartsWith(
-            'attachment; filename="penawaran-',
+        $this->assertSame(
+            "attachment; filename=\"Penawaran-1-S.Kontrak-KJPP-HJA'R-10-VIII-2026.pdf\"",
             (string) $download->headers->get('content-disposition'),
         );
-        $this->assertStringEndsWith('-draft.pdf"', (string) $download->headers->get('content-disposition'));
         $this->assertDatabaseHas('activity_logs', [
             'user_id' => $admin->id,
             'action' => 'PREVIEW_DRAFT',
@@ -551,8 +666,13 @@ class OfferDocumentAccessTest extends TestCase
             ->assertSee('Akses penawaran lintas cabang');
     }
 
-    private function makePrintReady(Offer $offer, Branch $branch, User $actor): void
-    {
+    private function makePrintReady(
+        Offer $offer,
+        Branch $branch,
+        User $actor,
+        bool $approve = true,
+        bool $finalize = true,
+    ): OfferDocumentVersion {
         $clauses = [];
 
         foreach ((array) config('offer-documents.clause_titles') as $key => $title) {
@@ -578,7 +698,7 @@ class OfferDocumentAccessTest extends TestCase
             ],
             'layout_version' => 'standard-v1',
             'header_mode' => 'odd_pages',
-            'effective_from' => now()->subDay(),
+            'effective_from' => $offer->offer_date->copy()->subDay(),
         ]);
         $issuer = IssuerProfileVersion::create([
             'branch_id' => $branch->getKey(),
@@ -587,7 +707,7 @@ class OfferDocumentAccessTest extends TestCase
             'address' => 'Jl. Kantor 1',
             'city' => 'Jakarta',
             'phone' => '021-123',
-            'effective_from' => now()->subDay(),
+            'effective_from' => $offer->offer_date->copy()->subDay(),
         ]);
         $signer = DocumentSignerVersion::create([
             'branch_id' => $branch->getKey(),
@@ -595,13 +715,18 @@ class OfferDocumentAccessTest extends TestCase
             'version_no' => 1,
             'full_name' => 'Penilai Utama',
             'position' => 'Partner',
-            'effective_from' => now()->subDay(),
+            'effective_from' => $offer->offer_date->copy()->subDay(),
         ]);
 
         $approval = app(OfferDocumentMasterApprovalService::class);
-        $templateVersion = $approval->approve($templateVersion, $actor);
-        $issuer = $approval->approve($issuer, $actor);
-        $signer = $approval->approve($signer, $actor);
+        $templateVersion = $approval->approveLegacy($templateVersion, $actor);
+        $issuer = $approval->approveLegacy($issuer, $actor);
+        $signer = $approval->approveLegacy($signer, $actor);
+
+        $submitter = User::factory()->create([
+            'branch_id' => $branch->getKey(),
+            'role' => 'admin',
+        ]);
 
         app(OfferDocumentBootstrapper::class)->saveDraft($offer, [
             'engagement' => [
@@ -673,7 +798,22 @@ class OfferDocumentAccessTest extends TestCase
                 'emphasis_style' => 'normal',
                 'sort_order' => 0,
             ]],
-        ], $actor);
+        ], $submitter);
+
+        $workflow = app(OfferDocumentWorkflowService::class);
+        $version = $workflow->submit($offer->fresh(), $submitter);
+
+        if (! $approve) {
+            return $version;
+        }
+
+        $version = $workflow->approve($version, $actor);
+
+        if ($finalize) {
+            $workflow->finalize($version, $actor);
+        }
+
+        return $version;
     }
 
     private function createBranch(string $code, int $numberCode, string $name): Branch

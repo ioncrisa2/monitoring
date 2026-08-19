@@ -12,6 +12,8 @@ class WorkOrder extends Model
 {
     use HasFactory;
 
+    public const STATUS_CANCELLED = 'BATAL';
+
     protected $fillable = [
         'offer_id',
         'contract_no',
@@ -71,9 +73,14 @@ class WorkOrder extends Model
         return $this->hasMany(Document::class)->latest();
     }
 
+    public function isCancelled(): bool
+    {
+        return $this->current_status === self::STATUS_CANCELLED;
+    }
+
     public function getIsOverdueAttribute(): bool
     {
-        if (!$this->sla_date || in_array($this->current_status, ['SELESAI', 'BATAL'])) {
+        if (! $this->sla_date || in_array($this->current_status, ['SELESAI', self::STATUS_CANCELLED])) {
             return false;
         }
 

@@ -2,12 +2,16 @@
 
 namespace App\Livewire\Offers;
 
+use App\Enums\OfferDocumentArtifactType;
+use App\Enums\OfferDocumentStorageStatus;
 use App\Models\DocumentSignerVersion;
 use App\Models\IssuerProfileVersion;
 use App\Models\Offer;
+use App\Models\OfferDocumentVersion;
 use App\Models\OfferTemplateVersion;
 use App\Models\User;
 use App\Services\Offers\OfferDocumentMasterIntegrityService;
+use App\Services\Offers\OfferDocumentWorkflowService;
 use DomainException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +38,8 @@ class DocumentEditor extends Component
 
     private const PREFLIGHT_VALIDATOR = 'App\\Services\\Offers\\OfferPreflightValidator';
 
+    private const WORKFLOW = 'App\\Services\\Offers\\OfferDocumentWorkflowService';
+
     #[Locked]
     public int $offerId;
 
@@ -51,6 +57,8 @@ class DocumentEditor extends Component
         'warnings' => [],
     ];
 
+    public string $reviewReason = '';
+
     #[Locked]
     public bool $printReadyEligible = false;
 
@@ -61,6 +69,7 @@ class DocumentEditor extends Component
 
         $offer->load(['branch', 'debtor', 'client', 'reportUser']);
         $this->draft = $this->loadDraft($offer);
+        $this->refreshPrintReadyEligibility($offer);
     }
 
     public function updatedDraft(): void
@@ -71,34 +80,194 @@ class DocumentEditor extends Component
 
     public function saveDraft(): void
     {
+        if (! $this->persistDraft()) {
+            return;
+        }
+
+        session()->flash('message', 'Draft dokumen penawaran berhasil disimpan.');
+    }
+
+    public function selectTemplate(int $templateVersionId): void
+    {
         $offer = $this->findOffer();
         $this->authorize('manageDocument', $offer);
+        $available = $this->approvedMasterOptions($offer)['templateVersions'];
+        $version = $available->firstWhere('id', $templateVersionId);
 
-        if (! class_exists(self::BOOTSTRAPPER)) {
-            $this->addError('integration', 'Fondasi dokumen penawaran belum tersedia.');
+        if (! $version instanceof OfferTemplateVersion
+            || (int) $version->schema_version !== 2
+            || $version->layout_version !== 'offer-a4-v2') {
+            $this->addError('draft.engagement.template_version_id', 'Template tidak tersedia untuk penawaran baru.');
 
             return;
         }
 
-        $validated = $this->validate()['draft'];
+        $defaults = data_get($version->clause_schema, 'defaults', []);
+
+        if (! is_array($defaults)) {
+            $defaults = [];
+        }
+
+        $this->draft['engagement']['template_version_id'] = $version->getKey();
+
+        foreach ([
+            'subject',
+            'purpose',
+            'valuation_basis',
+            'valuation_date_rule',
+            'investigation_level',
+            'report_format',
+            'report_language',
+            'report_copies',
+            'completion_days',
+            'completion_day_type',
+            'tax_inclusion',
+            'ppn_rate_bps',
+            'pph_rate_bps',
+            'fee_presentation',
+            'cost_inclusions',
+            'special_assumptions',
+        ] as $field) {
+            if (array_key_exists($field, $defaults)) {
+                $this->draft['engagement'][$field] = $defaults[$field];
+            }
+        }
+
+        if (isset($defaults['payment_terms']) && is_array($defaults['payment_terms'])) {
+            $this->draft['payment_terms'] = collect($defaults['payment_terms'])
+                ->values()
+                ->map(fn (mixed $term, int $index): array => [
+                    'sequence' => $index + 1,
+                    'percentage_bps' => (int) data_get($term, 'percentage_bps', 0),
+                    'trigger_text' => (string) data_get($term, 'trigger_text', ''),
+                    'due_days' => data_get($term, 'due_days'),
+                ])
+                ->all();
+        }
+
+        if (isset($defaults['requirements']) && is_array($defaults['requirements'])) {
+            $this->draft['requirements'] = collect($defaults['requirements'])
+                ->values()
+                ->map(function (mixed $requirement, int $index): array {
+                    $description = is_array($requirement)
+                        ? (string) ($requirement['description_snapshot'] ?? $requirement['description'] ?? '')
+                        : (string) $requirement;
+
+                    return [
+                        'requirement_code' => is_array($requirement) ? ($requirement['requirement_code'] ?? null) : null,
+                        'description_snapshot' => $description,
+                        'emphasis_style' => is_array($requirement) ? ($requirement['emphasis_style'] ?? 'normal') : 'normal',
+                        'sort_order' => $index,
+                    ];
+                })
+                ->all();
+        }
+
+        if (($this->draft['engagement']['fee_presentation'] ?? 'lump_sum') === 'lump_sum') {
+            $total = (int) collect($this->draft['fee_items'] ?? [])->sum(
+                fn (array $item): int => (int) ($item['quantity'] ?? 0) * (int) ($item['unit_amount'] ?? 0),
+            );
+            $first = $this->draft['fee_items'][0] ?? $this->emptyFeeItem(0);
+            $this->draft['fee_items'] = [[
+                ...$first,
+                'id' => $first['id'] ?? null,
+                'offer_subject_id' => null,
+                'offer_asset_id' => null,
+                'label' => (string) ($defaults['fee_label'] ?? 'Jasa penilaian'),
+                'quantity' => 1,
+                'unit_amount' => $total,
+                'sort_order' => 0,
+            ]];
+        }
+
+        $this->preflight = ['errors' => [], 'warnings' => []];
+        $this->printReadyEligible = false;
+        session()->flash('message', 'Template dipilih. Default template diterapkan; penerima, pihak, aset, dokumen, nilai fee, dan catatan internal dipertahankan.');
+    }
+
+    public function submitForReview(): void
+    {
+        $offer = $this->findOffer();
+        $this->authorize('generateDocumentDraft', $offer);
+
+        if (! $this->persistDraft()) {
+            return;
+        }
+
         $actor = Auth::user();
         abort_unless($actor instanceof User, 401);
 
-        $bootstrapper = app(self::BOOTSTRAPPER);
-
         try {
-            $bootstrapper->saveDraft($offer, $validated, $actor);
+            $version = app(OfferDocumentWorkflowService::class)->submit($offer->fresh(), $actor);
         } catch (DomainException $exception) {
-            $this->addError('draft', $exception->getMessage());
+            $this->preflight = ['errors' => [$exception->getMessage()], 'warnings' => []];
 
             return;
         }
 
-        $this->draft = $bootstrapper->loadForm($offer->fresh());
-        $this->preflight = ['errors' => [], 'warnings' => []];
-        $this->printReadyEligible = false;
+        $this->draft = $this->loadDraft($offer->fresh());
+        session()->flash('message', "Versi {$version->version_no} diajukan. Reviewer akan memeriksa snapshot dan PDF draft yang sama.");
+    }
 
-        session()->flash('message', 'Draft dokumen penawaran berhasil disimpan.');
+    public function approveCurrentVersion(): void
+    {
+        $offer = $this->findOffer();
+        $this->authorize('generateDocumentPrintReady', $offer);
+        $actor = Auth::user();
+        abort_unless($actor instanceof User, 401);
+
+        try {
+            $version = $this->currentReviewVersion($offer);
+            app(OfferDocumentWorkflowService::class)->approve($version, $actor);
+        } catch (DomainException $exception) {
+            $this->preflight = ['errors' => [$exception->getMessage()], 'warnings' => []];
+
+            return;
+        }
+
+        session()->flash('message', "Snapshot versi {$version->version_no} disetujui dan siap difinalkan.");
+    }
+
+    public function rejectCurrentVersion(): void
+    {
+        $offer = $this->findOffer();
+        $this->authorize('generateDocumentPrintReady', $offer);
+        $this->validateOnly('reviewReason', ['reviewReason' => ['required', 'string', 'max:1000']]);
+        $actor = Auth::user();
+        abort_unless($actor instanceof User, 401);
+
+        try {
+            $version = $this->currentReviewVersion($offer);
+            app(OfferDocumentWorkflowService::class)->reject($version, $actor, $this->reviewReason);
+        } catch (DomainException $exception) {
+            $this->addError('workflow', $exception->getMessage());
+
+            return;
+        }
+
+        $this->reviewReason = '';
+        $this->draft = $this->loadDraft($offer->fresh());
+        session()->flash('message', "Versi {$version->version_no} ditolak dan dikembalikan untuk revisi.");
+    }
+
+    public function finalizeCurrentVersion(): void
+    {
+        $offer = $this->findOffer();
+        $this->authorize('generateDocumentPrintReady', $offer);
+        $actor = Auth::user();
+        abort_unless($actor instanceof User, 401);
+
+        try {
+            $version = $this->currentReviewVersion($offer);
+            app(OfferDocumentWorkflowService::class)->finalize($version, $actor);
+        } catch (DomainException $exception) {
+            $this->preflight = ['errors' => [$exception->getMessage()], 'warnings' => []];
+
+            return;
+        }
+
+        $this->refreshPrintReadyEligibility($offer->fresh());
+        session()->flash('message', "PDF final versi {$version->version_no} tersimpan di arsip privat.");
     }
 
     public function checkPreflight(): void
@@ -129,26 +298,13 @@ class DocumentEditor extends Component
     {
         $offer = $this->findOffer();
         $this->authorize('generateDocumentPrintReady', $offer);
-
-        if (! class_exists(self::SNAPSHOT_BUILDER) || ! class_exists(self::PREFLIGHT_VALIDATOR)) {
-            $this->preflight = [
-                'errors' => ['Pemeriksaan PDF siap cetak belum tersedia.'],
+        $this->refreshPrintReadyEligibility($offer);
+        $this->preflight = $this->printReadyEligible
+            ? ['errors' => [], 'warnings' => []]
+            : [
+                'errors' => ['PDF final belum tersedia. Setujui snapshot review lalu jalankan finalisasi.'],
                 'warnings' => [],
             ];
-            $this->printReadyEligible = false;
-
-            return;
-        }
-
-        $snapshot = app(self::SNAPSHOT_BUILDER)->build($offer);
-        $validator = app(self::PREFLIGHT_VALIDATOR);
-        $result = $validator->validate($snapshot, $validator::MODE_PRINT_READY);
-
-        $this->preflight = [
-            'errors' => array_values($result['errors'] ?? []),
-            'warnings' => array_values($result['warnings'] ?? []),
-        ];
-        $this->printReadyEligible = $this->preflight['errors'] === [];
     }
 
     public function addSubject(): void
@@ -327,7 +483,15 @@ class DocumentEditor extends Component
 
     public function render()
     {
-        $offer = $this->findOffer()->load(['branch', 'debtor', 'client', 'reportUser']);
+        $offer = $this->findOffer()->load([
+            'branch',
+            'debtor',
+            'client',
+            'reportUser',
+            'engagement.currentReviewVersion.artifacts',
+            'engagement.currentFinalVersion.artifacts',
+            'documentVersions.artifacts',
+        ]);
         $this->authorize('viewDocument', $offer);
 
         $masterOptions = $this->approvedMasterOptions($offer);
@@ -339,7 +503,12 @@ class DocumentEditor extends Component
             'canGeneratePrintReady' => Auth::user()?->can('generateDocumentPrintReady', $offer) === true,
             'domainReady' => class_exists(self::BOOTSTRAPPER),
             'rendererReady' => class_exists('App\\Services\\Offers\\OfferDocumentRenderer'),
+            'finalizationEnabled' => (bool) config('offer-documents.features.finalization_enabled', false),
             'printReadyRouteReady' => Route::has('offers.documents.print-ready'),
+            'workflowState' => $offer->engagement?->workflow_state?->value ?? 'data_draft',
+            'currentReviewVersion' => $offer->engagement?->currentReviewVersion,
+            'currentFinalVersion' => $offer->engagement?->currentFinalVersion,
+            'documentVersions' => $offer->documentVersions->sortByDesc('version_no')->values(),
             ...$masterOptions,
         ])->layout('layouts.app');
     }
@@ -374,6 +543,7 @@ class DocumentEditor extends Component
             'draft.engagement.tax_inclusion' => ['required', 'in:included,excluded,non_taxable'],
             'draft.engagement.ppn_rate_bps' => ['required', 'integer', 'min:0', 'max:10000'],
             'draft.engagement.pph_rate_bps' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'draft.engagement.fee_presentation' => ['required', 'in:lump_sum,per_asset'],
             'draft.engagement.cost_inclusions' => ['array'],
             'draft.engagement.cost_inclusions.*' => ['string', 'max:100'],
             'draft.engagement.special_assumptions' => ['nullable', 'string', 'max:5000'],
@@ -399,6 +569,10 @@ class DocumentEditor extends Component
             'draft.subjects.*.assets.*.land_area_m2' => ['nullable', 'numeric', 'min:0', 'max:9999999999999.99'],
             'draft.subjects.*.assets.*.building_area_m2' => ['nullable', 'numeric', 'min:0', 'max:9999999999999.99'],
             'draft.subjects.*.assets.*.inspection_note' => ['nullable', 'string', 'max:3000'],
+            'draft.subjects.*.assets.*.exposure_amount' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
+            'draft.subjects.*.assets.*.reference_market_value' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
+            'draft.subjects.*.assets.*.reference_liquidation_value' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
+            'draft.subjects.*.assets.*.liquidation_discount_bps' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'draft.subjects.*.assets.*.sort_order' => ['required', 'integer', 'min:0', 'max:'.(self::MAX_ASSETS_PER_SUBJECT - 1)],
             'draft.subjects.*.assets.*.documents' => ['array', 'max:'.self::MAX_DOCUMENTS_PER_ASSET],
             'draft.subjects.*.assets.*.documents.*.id' => ['nullable', 'integer'],
@@ -478,6 +652,7 @@ class DocumentEditor extends Component
                 'tax_inclusion' => 'excluded',
                 'ppn_rate_bps' => 1100,
                 'pph_rate_bps' => 200,
+                'fee_presentation' => 'lump_sum',
                 'cost_inclusions' => [],
                 'special_assumptions' => '',
                 'internal_note' => $offer->note ?? '',
@@ -533,6 +708,10 @@ class DocumentEditor extends Component
             'land_area_m2' => null,
             'building_area_m2' => null,
             'inspection_note' => '',
+            'exposure_amount' => null,
+            'reference_market_value' => null,
+            'reference_liquidation_value' => null,
+            'liquidation_discount_bps' => null,
             'sort_order' => $sortOrder,
             'documents' => [$this->emptyAssetDocument(0)],
         ];
@@ -578,6 +757,59 @@ class DocumentEditor extends Component
         $this->authorize('manageDocument', $this->findOffer());
     }
 
+    private function persistDraft(): bool
+    {
+        $offer = $this->findOffer();
+        $this->authorize('manageDocument', $offer);
+
+        if (! class_exists(self::BOOTSTRAPPER)) {
+            $this->addError('integration', 'Fondasi dokumen penawaran belum tersedia.');
+
+            return false;
+        }
+
+        $validated = $this->validate()['draft'];
+        $actor = Auth::user();
+        abort_unless($actor instanceof User, 401);
+        $bootstrapper = app(self::BOOTSTRAPPER);
+
+        try {
+            $bootstrapper->saveDraft($offer, $validated, $actor);
+        } catch (DomainException $exception) {
+            $this->addError('draft', $exception->getMessage());
+
+            return false;
+        }
+
+        $this->draft = $bootstrapper->loadForm($offer->fresh());
+        $this->preflight = ['errors' => [], 'warnings' => []];
+        $this->refreshPrintReadyEligibility($offer->fresh());
+
+        return true;
+    }
+
+    private function currentReviewVersion(Offer $offer): OfferDocumentVersion
+    {
+        $offer->load('engagement.currentReviewVersion');
+        $version = $offer->engagement?->currentReviewVersion;
+
+        if (! $version instanceof OfferDocumentVersion) {
+            throw new DomainException('Tidak ada versi aktif yang sedang ditinjau.');
+        }
+
+        return $version;
+    }
+
+    private function refreshPrintReadyEligibility(Offer $offer): void
+    {
+        $offer->load('engagement.currentFinalVersion.artifacts');
+        $this->printReadyEligible = $offer->engagement?->currentFinalVersion?->artifacts
+            ->contains(fn ($artifact): bool => $artifact->artifact_type === OfferDocumentArtifactType::Final
+                && $artifact->storage_status === OfferDocumentStorageStatus::Ready
+                && $artifact->final_slot === 1
+            ) === true;
+    }
+
     /** @return array<string, mixed> */
     private function approvedMasterOptions(Offer $offer): array
     {
@@ -594,6 +826,9 @@ class DocumentEditor extends Component
             ->where(fn ($query) => $query
                 ->whereNull('effective_from')
                 ->orWhereDate('effective_from', '<=', $effectiveOn))
+            ->where(fn ($query) => $query
+                ->whereNull('effective_until')
+                ->orWhereDate('effective_until', '>=', $effectiveOn))
             ->orderByDesc('effective_from')
             ->orderByDesc('version_no')
             ->get()

@@ -18,9 +18,9 @@
         --ui-text-secondary: 75 85 99;
         --ui-text-muted: 107 114 128;
 
-        --ui-brand: 109 74 255;
-        --ui-brand-hover: 93 61 232;
-        --ui-brand-soft: 242 239 255;
+        --ui-brand: 11 42 115;
+        --ui-brand-hover: 7 31 90;
+        --ui-brand-soft: 238 243 255;
 
         --ui-success: 21 128 61;
         --ui-success-soft: 240 253 244;
@@ -53,9 +53,9 @@
         --ui-text-secondary: 209 213 219;
         --ui-text-muted: 156 163 175;
 
-        --ui-brand: 163 143 253;
-        --ui-brand-hover: 190 176 254;
-        --ui-brand-soft: 46 27 130;
+        --ui-brand: 111 147 255;
+        --ui-brand-hover: 145 170 255;
+        --ui-brand-soft: 22 37 80;
 
         --ui-success: 74 222 128;
         --ui-success-soft: 20 83 45;
@@ -96,6 +96,23 @@
 }
 
 @layer components {
+    /* HJAR Flows mark, cropped non-destructively from the supplied light/dark artwork. */
+    .app-logo {
+        @apply relative inline-block shrink-0 overflow-hidden align-middle;
+        aspect-ratio: 1;
+        border-radius: 22%;
+        background-image: url('/brand/hjar-flows-on-light.png');
+        background-position: 12% 50%;
+        background-repeat: no-repeat;
+        background-size: 500% auto;
+    }
+
+    .dark .app-logo {
+        background-image: url('/brand/hjar-flows-on-dark.png');
+        background-position: 12.6% 50%;
+        background-size: 450% auto;
+    }
+
     /* Page structure */
     .ui-page {
         @apply mx-auto w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8;
@@ -184,6 +201,16 @@
     .ui-text-action:hover {
         background-color: rgb(var(--ui-brand-soft));
         color: rgb(var(--ui-brand-hover));
+    }
+
+    .ui-text-action:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+    }
+
+    .ui-text-action:disabled:hover {
+        background-color: transparent;
+        color: rgb(var(--ui-text-muted));
     }
 
     .ui-text-action-danger {

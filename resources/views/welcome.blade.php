@@ -4,8 +4,8 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title>{{ config('app.name', 'KJPP Monitoring') }}</title>
-        <meta name="description" content="Sistem internal untuk pemantauan penawaran, pekerjaan penilaian, SLA, dan laporan produksi KJPP.">
+        <title>{{ config('app.name', 'HJAR Flows') }}</title>
+        <meta name="description" content="HJAR Flows adalah sistem internal untuk pemantauan penawaran, pekerjaan penilaian, SLA, dan laporan produksi KJPP.">
 
         <script>
             (function() {
@@ -31,9 +31,9 @@
         <div class="flex min-h-dvh flex-col">
             <header class="border-b border-line bg-surface">
                 <div class="mx-auto flex h-16 w-full max-w-app items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-                    <a href="/" class="flex items-center gap-3 rounded-ui-sm focus-visible:outline-offset-4" aria-label="Beranda KJPP Monitoring">
+                    <a href="/" class="flex items-center gap-3 rounded-ui-sm focus-visible:outline-offset-4" aria-label="Beranda HJAR Flows">
                         <x-application-logo class="size-9 text-brand" />
-                        <span class="text-base font-semibold text-ink">KJPP Monitoring</span>
+                        <span class="text-base font-semibold text-ink">HJAR Flows</span>
                     </a>
 
                     @if(Route::has('login'))
@@ -68,9 +68,6 @@
                                     Masuk ke sistem
                                     <span aria-hidden="true">→</span>
                                 </a>
-                                @if(Route::has('register'))
-                                    <a href="{{ route('register') }}" wire:navigate class="ui-btn ui-btn-secondary w-full sm:w-auto">Daftar akun</a>
-                                @endif
                             @endauth
                         </div>
 
@@ -85,7 +82,7 @@
             </main>
 
             <footer class="border-t border-line px-4 py-5 text-center text-xs text-ink-muted">
-                &copy; {{ date('Y') }} KJPP Monitoring · Sistem internal operasional dan aset
+                &copy; {{ date('Y') }} HJAR Flows · Sistem internal operasional dan aset
             </footer>
         </div>
     </body>

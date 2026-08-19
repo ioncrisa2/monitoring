@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'KJPP Monitoring') }}</title>
+        <title>{{ config('app.name', 'HJAR Flows') }}</title>
 
         <script>
             (function() {
@@ -26,10 +26,10 @@
     <body class="bg-canvas font-sans text-ink antialiased">
         <main class="flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6">
             <div class="w-full max-w-md">
-                <a href="/" wire:navigate class="mx-auto mb-6 flex w-fit items-center gap-3 rounded-ui-sm focus-visible:outline-offset-4" aria-label="Kembali ke beranda KJPP Monitoring">
+                <a href="/" wire:navigate class="mx-auto mb-6 flex w-fit items-center gap-3 rounded-ui-sm focus-visible:outline-offset-4" aria-label="Kembali ke beranda HJAR Flows">
                     <x-application-logo class="size-10 text-brand" />
                     <span>
-                        <span class="block text-base font-semibold leading-5 text-ink">KJPP Monitoring</span>
+                        <span class="block text-base font-semibold leading-5 text-ink">HJAR Flows</span>
                         <span class="block text-xs leading-5 text-ink-muted">Sistem operasional internal</span>
                     </span>
                 </a>

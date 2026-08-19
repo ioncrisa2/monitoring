@@ -8,8 +8,5 @@
     @else
         <a href="{{ route('login') }}" wire:navigate class="ui-btn ui-btn-primary">Masuk</a>
 
-        @if(Route::has('register'))
-            <a href="{{ route('register') }}" wire:navigate class="ui-btn ui-btn-ghost hidden sm:inline-flex">Daftar</a>
-        @endif
     @endauth
 </nav>

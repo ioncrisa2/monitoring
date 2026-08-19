@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OfferFeePresentation;
 use App\Enums\OfferTaxInclusion;
 use App\Enums\OfferWorkflowState;
 use Illuminate\Database\Eloquent\Model;
@@ -43,6 +44,7 @@ class OfferEngagement extends Model
         'completion_days',
         'completion_day_type',
         'tax_inclusion',
+        'fee_presentation',
         'ppn_rate_bps',
         'pph_rate_bps',
         'cost_inclusions',
@@ -61,6 +63,7 @@ class OfferEngagement extends Model
             'report_copies' => 'integer',
             'completion_days' => 'integer',
             'tax_inclusion' => OfferTaxInclusion::class,
+            'fee_presentation' => OfferFeePresentation::class,
             'ppn_rate_bps' => 'integer',
             'pph_rate_bps' => 'integer',
             'cost_inclusions' => 'array',

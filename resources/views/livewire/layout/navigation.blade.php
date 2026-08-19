@@ -28,9 +28,10 @@ new class extends Component
         request()->routeIs('master.roles-permissions') => ['Administrasi', 'Peran & Hak Akses'],
         request()->routeIs('master.organizations') => ['Administrasi', 'Klien'],
         request()->routeIs('master.debtors') => ['Administrasi', 'Debitur'],
+        request()->routeIs('master.offer-documents') => ['Administrasi', 'Master Dokumen Penawaran'],
         request()->routeIs('audit-logs.*') => ['Administrasi', 'Jejak Audit'],
         request()->routeIs('profile') => ['Akun', 'Profil'],
-        default => ['KJPP Monitoring', 'Aplikasi'],
+        default => ['HJAR Flows', 'Aplikasi'],
     };
 @endphp
 
@@ -69,7 +70,7 @@ new class extends Component
             <div class="flex h-[3.75rem] shrink-0 items-center justify-between border-b border-line px-4">
                 <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-2.5 text-base font-semibold tracking-tight text-ink">
                     <x-application-logo class="block h-7 w-auto fill-current text-brand" />
-                    <span>KJPP Monitoring</span>
+                    <span>HJAR Flows</span>
                 </a>
 
                 <button @click="sidebarOpen = false" type="button" class="ui-icon-btn h-9 w-9" aria-label="Tutup navigasi">
@@ -99,7 +100,7 @@ new class extends Component
             <div class="flex h-[3.75rem] shrink-0 items-center border-b border-line px-5">
                 <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-2.5 text-base font-semibold tracking-tight text-ink">
                     <x-application-logo class="block h-7 w-auto fill-current text-brand" />
-                    <span>KJPP Monitoring</span>
+                    <span>HJAR Flows</span>
                 </a>
             </div>
 

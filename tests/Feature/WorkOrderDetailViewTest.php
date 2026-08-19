@@ -233,6 +233,60 @@ class WorkOrderDetailViewTest extends TestCase
             ->assertDontSeeHtml('wire:click="markSurveyComplete"');
     }
 
+    public function test_cancelling_a_work_order_immediately_locks_all_mutating_actions(): void
+    {
+        $sysadmin = User::factory()->create(['role' => 'sysadmin']);
+        $workOrder = $this->createWorkOrder($sysadmin);
+        $originalSlaDate = $workOrder->sla_date->format('Y-m-d');
+
+        $component = Livewire::actingAs($sysadmin)
+            ->test(Show::class, ['id' => $workOrder->id])
+            ->set('next_status', WorkOrder::STATUS_CANCELLED)
+            ->set('status_note', 'Dibatalkan oleh klien')
+            ->call('updateStatus')
+            ->assertSet('workOrder.current_status', WorkOrder::STATUS_CANCELLED)
+            ->assertSee('Pekerjaan dibatalkan dan dikunci')
+            ->assertSee('Alur dikunci karena pekerjaan dibatalkan')
+            ->assertSeeHtml('disabled');
+
+        $this->assertSame(WorkOrder::STATUS_CANCELLED, $workOrder->fresh()->current_status);
+        $this->assertSame(1, $workOrder->statusHistories()->count());
+
+        $component
+            ->call('openStatusModal', 'PERSIAPAN')
+            ->assertSet('showStatusModal', false)
+            ->set('next_status', 'PERSIAPAN')
+            ->call('updateStatus')
+            ->set('edit_sla_date', '2026-09-30')
+            ->call('saveSlaConfig')
+            ->set('selected_surveyor_id', $sysadmin->id)
+            ->set('selected_reviewer_id', $sysadmin->id)
+            ->call('saveAssignments')
+            ->call('createAsset')
+            ->assertSet('showAssetModal', false)
+            ->set('asset_type', 'kendaraan')
+            ->call('saveAsset')
+            ->call('createReport')
+            ->assertSet('showReportModal', false)
+            ->call('saveReport')
+            ->call('openDeliveryModal', 999999)
+            ->assertSet('showDeliveryModal', false)
+            ->call('openDocumentModal')
+            ->assertSet('showDocumentModal', false)
+            ->call('uploadDocument')
+            ->assertSee('Pekerjaan yang sudah dibatalkan bersifat terkunci dan tidak dapat diubah lagi.');
+
+        $lockedWorkOrder = $workOrder->fresh();
+
+        $this->assertSame(WorkOrder::STATUS_CANCELLED, $lockedWorkOrder->current_status);
+        $this->assertSame($originalSlaDate, $lockedWorkOrder->sla_date->format('Y-m-d'));
+        $this->assertSame(1, $lockedWorkOrder->statusHistories()->count());
+        $this->assertFalse($lockedWorkOrder->assignments()->exists());
+        $this->assertFalse($lockedWorkOrder->assets()->exists());
+        $this->assertFalse($lockedWorkOrder->reports()->exists());
+        $this->assertFalse($lockedWorkOrder->documents()->exists());
+    }
+
     private static int $workOrderSequence = 0;
 
     private function createWorkOrder(User $user, string $status = 'PERSIAPAN'): WorkOrder

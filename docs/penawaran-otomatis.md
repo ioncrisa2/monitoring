@@ -1,5 +1,7 @@
 # Rencana Penerapan Fitur Penawaran Otomatis
 
+> Implementasi runtime terbaru menggunakan schema v2, workflow master, serta arsip PDF immutable. Lihat [Generator Dokumen Penawaran v2](penawaran-generator-v2.md) untuk kontrak dan runbook aktif. Bagian di bawah ini dipertahankan sebagai catatan analisis dan desain historis.
+
 ## Status Dokumen
 
 - Tanggal analisis: 12 Agustus 2026.
@@ -909,7 +911,7 @@ Test keamanan wajib mencoba ID milik cabang lain melalui URL preview/download, p
 ## 16. Penyimpanan dan Keamanan
 
 - PDF dirender on-demand dan tidak disimpan oleh aplikasi pada scope cetak v1.
-- Nama unduhan yang aman: `penawaran-{nomor-aman}-{klien-aman}.pdf`.
+- Nama file draft dan siap cetak menggunakan pola `Penawaran-{nomor-penawaran-lengkap}.pdf`; karakter yang tidak valid untuk nama file diganti tanda hubung tanpa menghilangkan segmen nomor.
 - Pengunduhan selalu melalui route yang melakukan policy check.
 - Jangan menerima path file dari public Livewire property.
 - Letterhead/logo lokal harus lolos validasi MIME, ukuran, dimensi, dan image decode.

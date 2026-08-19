@@ -1,14 +1,14 @@
 @page {
     size: A4 portrait;
-    margin: 25mm 25mm 22mm;
+    margin: 36mm 20mm 18mm;
 }
 
 @page :odd {
-    margin-top: 30mm;
+    margin: 36mm 20mm 18mm;
 }
 
 @page :even {
-    margin-top: 24mm;
+    margin: 36mm 20mm 18mm;
 }
 
 * {
@@ -21,11 +21,43 @@ body {
     padding: 0;
 }
 
+.document-letterhead {
+    position: fixed;
+    top: -30mm;
+    right: 0;
+    left: 0;
+    height: 27mm;
+    overflow: hidden;
+}
+
+.letterhead-image {
+    display: block;
+    width: 100%;
+    max-height: 27mm;
+    object-fit: contain;
+    object-position: center top;
+}
+
+.letterhead-fallback {
+    height: 23mm;
+    padding-bottom: 2mm;
+    border-bottom: 0.6pt solid #666666;
+    color: #4b4b4b;
+    font-size: 7.2pt;
+    line-height: 1.25;
+}
+
+.letterhead-name {
+    color: #111111;
+    font-size: 11pt;
+    font-weight: bold;
+}
+
 body {
     color: #111111;
     font-family: "DejaVu Sans", sans-serif;
-    font-size: 10.5pt;
-    line-height: 1.45;
+    font-size: 9.5pt;
+    line-height: 1.38;
 }
 
 p {
@@ -34,21 +66,22 @@ p {
 
 .draft-watermark {
     position: fixed;
-    top: 47%;
+    top: 45%;
     right: 0;
     left: 0;
-    color: #777777;
-    font-size: 27pt;
+    color: #eceff3;
+    font-size: 28pt;
     font-weight: bold;
-    letter-spacing: 0.6pt;
-    opacity: 0.11;
+    letter-spacing: 0.9pt;
     text-align: center;
+    transform: rotate(-28deg);
 }
 
 .letter-meta {
     width: 100%;
-    margin: 0 0 8mm;
+    margin: 0 0 7mm;
     border-collapse: collapse;
+    table-layout: fixed;
 }
 
 .letter-meta td {
@@ -61,8 +94,12 @@ p {
     text-align: right;
 }
 
+.letter-label {
+    font-weight: bold;
+}
+
 .recipient {
-    margin-bottom: 7mm;
+    margin-bottom: 6mm;
     line-height: 1.35;
 }
 
@@ -71,20 +108,20 @@ p {
 }
 
 .letter-subject {
-    margin: 0 0 7mm;
+    margin: 0 0 6mm;
     font-weight: bold;
     text-align: center;
     text-decoration: underline;
 }
 
 .body-copy {
-    margin-bottom: 4mm;
+    margin-bottom: 3.5mm;
     text-align: justify;
     white-space: pre-line;
 }
 
 .clauses {
-    margin-top: 2mm;
+    margin-top: 3mm;
 }
 
 .clause {
@@ -93,44 +130,123 @@ p {
 
 .clause-block {
     width: 100%;
+    margin: 0 0 1.8mm;
     border-collapse: collapse;
-    page-break-inside: avoid;
+    page-break-inside: auto;
     table-layout: fixed;
 }
 
 .clause-block td {
-    padding: 0 0 2.2mm;
+    padding: 0;
     vertical-align: top;
 }
 
+.clause-row {
+    page-break-inside: auto;
+}
+
 .clause-number {
-    width: 8mm;
+    width: 5%;
 }
 
 .clause-title {
-    width: 44mm;
-    padding-right: 2mm !important;
+    width: 30%;
+    padding-right: 3mm !important;
     font-weight: bold;
 }
 
 .clause-colon {
-    width: 5mm;
+    width: 3%;
 }
 
 .clause-content {
-    text-align: justify;
+    width: 62%;
+    line-height: 1.38;
+    text-align: left;
+    white-space: normal;
+}
+
+.clause-text {
     white-space: pre-line;
 }
 
-.clause-list-item {
-    padding-left: 4mm !important;
+.clause-content-block + .clause-content-block {
+    margin-top: 1.2mm;
+}
+
+.clause-list {
+    margin: 0;
+    padding-left: 4.5mm;
+}
+
+.clause-list li {
+    margin: 0 0 0.8mm;
+    page-break-inside: avoid;
+}
+
+.data-table {
+    width: 100%;
+    margin: 0.8mm 0 1.5mm;
+    border-collapse: collapse;
+    font-size: 7.7pt;
+    line-height: 1.25;
+    page-break-inside: auto;
+}
+
+.data-table thead {
+    display: table-header-group;
+}
+
+.data-table tr {
+    page-break-inside: avoid;
+}
+
+.data-table th,
+.data-table td {
+    padding: 1.2mm 1.4mm;
+    border: 0.45pt solid #777777;
+    vertical-align: top;
+}
+
+.data-table th {
+    background: #eeeeee;
+    font-weight: bold;
     text-align: left;
 }
 
-.bullet {
-    display: inline-block;
-    width: 4mm;
-    margin-left: -4mm;
+.data-table .cell-number {
+    width: 9mm;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.data-table .cell-money {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.cell-secondary {
+    margin-top: 0.8mm;
+    color: #555555;
+    font-size: 7.2pt;
+}
+
+.summary-table th {
+    width: 58%;
+}
+
+.amount-in-words,
+.empty-table-message {
+    margin-top: 1mm;
+    font-style: italic;
+}
+
+.emphasis-bold {
+    font-weight: bold;
+}
+
+.emphasis-italic {
+    font-style: italic;
 }
 
 .closing-copy {
@@ -139,9 +255,10 @@ p {
 
 .signatures {
     width: 100%;
-    margin-top: 9mm;
+    margin-top: 8mm;
     border-collapse: collapse;
     page-break-inside: avoid;
+    table-layout: fixed;
 }
 
 .signatures td {
@@ -151,7 +268,7 @@ p {
 }
 
 .signature-space td {
-    height: 27mm;
+    height: 25mm;
 }
 
 .signature-name {

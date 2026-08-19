@@ -4,12 +4,31 @@ namespace App\Models;
 
 use App\Enums\OfferDocumentArtifactType;
 use App\Enums\OfferDocumentStorageStatus;
+use DomainException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OfferDocumentArtifact extends Model
 {
+    protected static function booted(): void
+    {
+        static::updating(function (self $artifact): void {
+            if (in_array($artifact->getRawOriginal('storage_status'), [
+                OfferDocumentStorageStatus::Ready->value,
+                OfferDocumentStorageStatus::Void->value,
+            ], true)) {
+                throw new DomainException('Artifact dokumen yang sudah siap bersifat immutable.');
+            }
+
+            throw new DomainException('Arsip artifact dokumen hanya dapat berubah melalui layanan workflow resmi.');
+        });
+
+        static::deleting(function (): void {
+            throw new DomainException('Artifact dokumen tidak dapat dihapus.');
+        });
+    }
+
     protected $fillable = [
         'offer_document_version_id',
         'artifact_type',

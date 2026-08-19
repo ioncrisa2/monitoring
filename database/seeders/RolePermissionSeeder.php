@@ -41,6 +41,9 @@ class RolePermissionSeeder extends Seeder
             'offers.documents.manage',
             'offers.documents.generate-draft',
             'offers.documents.generate-print-ready',
+            'offers.document-masters.view',
+            'offers.document-masters.manage',
+            'offers.document-masters.approve',
             'offers.cross-branch',
         ];
 
@@ -50,9 +53,14 @@ class RolePermissionSeeder extends Seeder
 
         // 2. Create Roles and Assign Permissions
 
-        // Sysadmin: Full access to everything
+        // Sysadmin manages the catalog but cannot approve document masters.
         $sysadminRole = Role::findOrCreate('sysadmin', 'web');
-        $sysadminRole->syncPermissions(Permission::all());
+        $sysadminRole->syncPermissions(
+            Permission::query()
+                ->where('guard_name', 'web')
+                ->where('name', '!=', 'offers.document-masters.approve')
+                ->get(),
+        );
 
         // Supervisor: Access to operational menus, reports, master-data, and management actions
         $supervisorRole = Role::findOrCreate('supervisor', 'web');
@@ -72,6 +80,8 @@ class RolePermissionSeeder extends Seeder
             'offers.documents.manage',
             'offers.documents.generate-draft',
             'offers.documents.generate-print-ready',
+            'offers.document-masters.view',
+            'offers.document-masters.approve',
         ]);
 
         // Admin: Access to dashboard, offers, work orders, change status

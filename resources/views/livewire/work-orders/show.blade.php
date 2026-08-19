@@ -36,18 +36,30 @@
                             </button>
                         @endif
                         @if($canEditSla)
-                            <button wire:click="$set('showSlaModal', true)" type="button" class="ui-btn ui-btn-secondary">
+                            <button wire:click="openSlaModal" type="button" class="ui-btn ui-btn-secondary" @disabled($isCancelled) @if($isCancelled) title="Pekerjaan batal tidak dapat diubah" aria-describedby="cancelled-lock-message" @endif>
                                 Atur SLA & survey
                             </button>
                         @endif
                         @if($canAssignPic)
-                            <button wire:click="$set('showAssignModal', true)" type="button" class="ui-btn ui-btn-primary">
+                            <button wire:click="openAssignModal" type="button" class="ui-btn ui-btn-primary" @disabled($isCancelled) @if($isCancelled) title="Pekerjaan batal tidak dapat diubah" aria-describedby="cancelled-lock-message" @endif>
                                 Atur PIC
                             </button>
                         @endif
                     </div>
                 @endif
             </header>
+
+            @if($isCancelled)
+                <div id="cancelled-lock-message" role="note" class="flex items-start gap-3 rounded-ui border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">
+                    <svg aria-hidden="true" class="mt-0.5 h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M7 10V8a5 5 0 0110 0v2m-11 0h12a1 1 0 011 1v9H5v-9a1 1 0 011-1z" />
+                    </svg>
+                    <div>
+                        <div class="font-semibold">Pekerjaan dibatalkan dan dikunci</div>
+                        <p class="mt-0.5 leading-5 text-red-700 dark:text-red-300">Data tetap tersedia sebagai arsip, tetapi status, SLA, PIC, aset, laporan, pengiriman, dan dokumen tidak dapat diubah lagi.</p>
+                    </div>
+                </div>
+            @endif
 
             @if (session()->has('message'))
                 <div role="status" class="flex items-center justify-between gap-4 rounded-ui border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -66,13 +78,14 @@
             <section class="border-y border-line py-4" aria-labelledby="workflow-heading">
                 <div class="mb-3 flex items-center justify-between gap-4">
                     <h2 id="workflow-heading" class="ui-section-heading">Alur status pekerjaan</h2>
-                    <span class="text-xs text-ink-muted">Pilih tahap untuk memperbarui status</span>
+                    <span class="text-xs text-ink-muted">{{ $isCancelled ? 'Alur dikunci karena pekerjaan dibatalkan' : 'Pilih tahap untuk memperbarui status' }}</span>
                 </div>
                 @php
                     $statuses = $workOrder->survey_required
                         ? ['PERSIAPAN', 'SURVEY', 'PENGERJAAN', 'REVIEW', 'CETAK', 'SELESAI']
                         : ['PERSIAPAN', 'PENGERJAAN', 'REVIEW', 'CETAK', 'SELESAI'];
                     $currentIdx = array_search($workOrder->current_status, $statuses);
+                    $canSelectStatus = $canChangeStatus && ! $isCancelled;
                 @endphp
                 <ol class="flex items-center overflow-x-auto pb-1" aria-label="Tahapan pekerjaan">
                     @foreach($statuses as $idx => $st)
@@ -83,9 +96,9 @@
                         <li class="flex shrink-0 items-center">
                             <button
                                 type="button"
-                                @if($canChangeStatus) wire:click="openStatusModal('{{ $st }}')" @else disabled @endif
+                                @if($canSelectStatus) wire:click="openStatusModal('{{ $st }}')" @else disabled @endif
                                 @if($isCurrent) aria-current="step" @endif
-                                class="group flex shrink-0 items-center gap-2 rounded-ui-sm py-1 focus-visible:outline-offset-4 {{ $canChangeStatus ? '' : 'cursor-default' }}"
+                                class="group flex shrink-0 items-center gap-2 rounded-ui-sm py-1 focus-visible:outline-offset-4 {{ $canSelectStatus ? '' : ($isCancelled ? 'cursor-not-allowed opacity-60' : 'cursor-default') }}"
                             >
                                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full
                                     {{ $isCurrent
@@ -217,7 +230,7 @@
                             <div class="flex items-center justify-between gap-3 border-b border-line pb-3">
                                 <h2 id="sla-overview-heading" class="ui-section-heading">Status & SLA</h2>
                                 @if($canEditSla)
-                                    <button wire:click="$set('showSlaModal', true)" type="button" class="ui-text-action -my-1">Ubah</button>
+                                    <button wire:click="openSlaModal" type="button" class="ui-text-action -my-1" @disabled($isCancelled) @if($isCancelled) title="Pekerjaan batal tidak dapat diubah" @endif>Ubah</button>
                                 @endif
                             </div>
                             <dl class="mt-4 space-y-3 text-sm">
@@ -240,7 +253,7 @@
                             <div class="flex items-center justify-between gap-3 border-b border-line pb-3">
                                 <h2 id="pic-heading" class="ui-section-heading">Penugasan PIC</h2>
                                 @if($canAssignPic)
-                                    <button wire:click="$set('showAssignModal', true)" type="button" class="ui-text-action -my-1">Ubah</button>
+                                    <button wire:click="openAssignModal" type="button" class="ui-text-action -my-1" @disabled($isCancelled) @if($isCancelled) title="Pekerjaan batal tidak dapat diubah" @endif>Ubah</button>
                                 @endif
                             </div>
                             <div class="mt-4 space-y-4 text-sm">
@@ -282,7 +295,7 @@
                             <p class="ui-section-description">Data tanah, bangunan, mesin, kendaraan, dan objek lain dalam pekerjaan ini.</p>
                         </div>
                         @if($canManageAssets)
-                            <button wire:click="createAsset" type="button" class="ui-btn ui-btn-primary shrink-0">
+                            <button wire:click="createAsset" type="button" class="ui-btn ui-btn-primary shrink-0" @disabled($isCancelled) @if($isCancelled) title="Pekerjaan batal tidak dapat diubah" @endif>
                                 Tambah objek aset
                             </button>
                         @endif
@@ -311,8 +324,8 @@
                                             <td>{{ $asset->city ?? '-' }}, {{ $asset->province ?? '-' }}</td>
                                             <td class="max-w-xs text-xs text-ink-muted">{{ $asset->description ?? 'Belum ada deskripsi' }}</td>
                                             <td class="whitespace-nowrap text-right">
-                                                <button wire:click="editAsset({{ $asset->id }})" type="button" class="ui-text-action" aria-label="Edit aset {{ str_replace('_', ' ', $asset->asset_type) }}">Edit</button>
-                                                <button wire:confirm="Yakin ingin menghapus aset ini?" wire:click="deleteAsset({{ $asset->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus aset {{ str_replace('_', ' ', $asset->asset_type) }}">Hapus</button>
+                                                <button wire:click="editAsset({{ $asset->id }})" type="button" class="ui-text-action" aria-label="Edit aset {{ str_replace('_', ' ', $asset->asset_type) }}" @disabled($isCancelled)>Edit</button>
+                                                <button wire:confirm="Yakin ingin menghapus aset ini?" wire:click="deleteAsset({{ $asset->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus aset {{ str_replace('_', ' ', $asset->asset_type) }}" @disabled($isCancelled)>Hapus</button>
                                             </td>
                                         </tr>
                                     @empty
@@ -373,7 +386,7 @@
                             <p class="ui-section-description">Nomor laporan, nilai penilaian, tanggal cetak, dan bukti pengiriman.</p>
                         </div>
                         @if($canReview)
-                            <button wire:click="createReport" type="button" class="ui-btn ui-btn-primary shrink-0">
+                            <button wire:click="createReport" type="button" class="ui-btn ui-btn-primary shrink-0" @disabled($isCancelled) @if($isCancelled) title="Pekerjaan batal tidak dapat diubah" @endif>
                                 Terbitkan laporan
                             </button>
                         @endif
@@ -393,9 +406,9 @@
                                     </div>
                                     @if($canReview)
                                         <div class="flex flex-wrap items-center gap-1">
-                                            <button wire:click="openDeliveryModal({{ $report->id }})" type="button" class="ui-text-action">Pengiriman</button>
-                                            <button wire:click="editReport({{ $report->id }})" type="button" class="ui-text-action">Edit</button>
-                                            <button wire:confirm="Yakin hapus laporan ini?" wire:click="deleteReport({{ $report->id }})" type="button" class="ui-text-action ui-text-action-danger">Hapus</button>
+                                            <button wire:click="openDeliveryModal({{ $report->id }})" type="button" class="ui-text-action" @disabled($isCancelled)>Pengiriman</button>
+                                            <button wire:click="editReport({{ $report->id }})" type="button" class="ui-text-action" @disabled($isCancelled)>Edit</button>
+                                            <button wire:confirm="Yakin hapus laporan ini?" wire:click="deleteReport({{ $report->id }})" type="button" class="ui-text-action ui-text-action-danger" @disabled($isCancelled)>Hapus</button>
                                         </div>
                                     @endif
                                 </div>
@@ -445,7 +458,7 @@
                             <p class="ui-section-description">Berkas penawaran, data survey, draft laporan, dan scan laporan final.</p>
                         </div>
                         @if($canReview)
-                            <button wire:click="openDocumentModal" type="button" class="ui-btn ui-btn-primary shrink-0">
+                            <button wire:click="openDocumentModal" type="button" class="ui-btn ui-btn-primary shrink-0" @disabled($isCancelled) @if($isCancelled) title="Pekerjaan batal tidak dapat diubah" @endif>
                                 Unggah dokumen
                             </button>
                         @endif
@@ -473,7 +486,7 @@
                                         <td class="whitespace-nowrap text-right">
                                             <a href="{{ Storage::url($doc->file_path) }}" target="_blank" rel="noopener" class="ui-text-action" aria-label="Unduh {{ $doc->title }} di tab baru">Unduh</a>
                                             @if($canReview)
-                                                <button wire:confirm="Hapus dokumen ini dari arsip?" wire:click="deleteDocument({{ $doc->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus {{ $doc->title }}">Hapus</button>
+                                                <button wire:confirm="Hapus dokumen ini dari arsip?" wire:click="deleteDocument({{ $doc->id }})" type="button" class="ui-text-action ui-text-action-danger" aria-label="Hapus {{ $doc->title }}" @disabled($isCancelled)>Hapus</button>
                                             @endif
                                         </td>
                                     </tr>
@@ -496,7 +509,7 @@
     </div>
 
     <!-- MODAL FASE 3: ASSET -->
-    @if($showAssetModal && $canManageAssets)
+    @if($showAssetModal && $canManageAssets && ! $isCancelled)
         <x-modal name="asset-editor" :show="$showAssetModal" close-property="showAssetModal" maxWidth="md" labelledby="asset-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="asset-modal-title" class="ui-modal-title">
@@ -553,7 +566,7 @@
     @endif
 
     <!-- MODAL FASE 3: REPORT -->
-    @if($showReportModal && $canReview)
+    @if($showReportModal && $canReview && ! $isCancelled)
         <x-modal name="report-editor" :show="$showReportModal" close-property="showReportModal" maxWidth="md" labelledby="report-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="report-modal-title" class="ui-modal-title">
@@ -614,7 +627,7 @@
     @endif
 
     <!-- MODAL FASE 3: DELIVERY -->
-    @if($showDeliveryModal && $canReview)
+    @if($showDeliveryModal && $canReview && ! $isCancelled)
         <x-modal name="delivery-editor" :show="$showDeliveryModal" close-property="showDeliveryModal" maxWidth="md" labelledby="delivery-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="delivery-modal-title" class="ui-modal-title">Status & resi pengiriman laporan</h2>
@@ -665,7 +678,7 @@
     @endif
 
     <!-- MODAL FASE 3: DOCUMENT UPLOAD -->
-    @if($showDocumentModal && $canReview)
+    @if($showDocumentModal && $canReview && ! $isCancelled)
         <x-modal name="document-upload" :show="$showDocumentModal" close-property="showDocumentModal" maxWidth="md" labelledby="document-modal-title" focusable>
                 <div class="ui-modal-header">
                     <h2 id="document-modal-title" class="ui-modal-title">Unggah dokumen ke arsip</h2>
@@ -712,7 +725,7 @@
     @endif
 
     <!-- MODAL EXISTINGS: STATUS & ASSIGNMENT & SLA -->
-    @if($showStatusModal && $canChangeStatus)
+    @if($showStatusModal && $canChangeStatus && ! $isCancelled)
         <x-modal name="status-editor" :show="$showStatusModal" close-property="showStatusModal" maxWidth="sm" labelledby="status-modal-title" focusable>
                 <div class="ui-modal-header">
                     <div>
@@ -751,7 +764,7 @@
         </x-modal>
     @endif
 
-    @if($showAssignModal && $canAssignPic)
+    @if($showAssignModal && $canAssignPic && ! $isCancelled)
         <x-modal name="assignment-editor" :show="$showAssignModal" close-property="showAssignModal" maxWidth="sm" labelledby="assignment-modal-title" focusable>
                 <div class="ui-modal-header">
                     <div>
@@ -788,7 +801,7 @@
         </x-modal>
     @endif
 
-    @if($showSlaModal && $canEditSla)
+    @if($showSlaModal && $canEditSla && ! $isCancelled)
         <x-modal name="sla-editor" :show="$showSlaModal" close-property="showSlaModal" maxWidth="sm" labelledby="sla-modal-title" focusable>
                 <div class="ui-modal-header">
                     <div>

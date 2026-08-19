@@ -8,8 +8,8 @@ use App\Models\Report;
 use App\Models\StatusHistory;
 use App\Models\User;
 use App\Models\WorkOrder;
-use App\Models\WorkOrderAssignment;
 use App\Models\WorkOrderAsset;
+use App\Models\WorkOrderAssignment;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -20,58 +20,91 @@ class Show extends Component
 {
     use WithFileUploads;
 
+    private const CANCELLED_MESSAGE = 'Pekerjaan yang sudah dibatalkan bersifat terkunci dan tidak dapat diubah lagi.';
+
     public WorkOrder $workOrder;
+
     public string $activeTab = 'info'; // info, assets, reports, deliveries, documents
 
     // Status transition state
     public string $next_status = '';
+
     public string $status_note = '';
+
     public bool $showStatusModal = false;
 
     // Assignment state
     public ?int $selected_surveyor_id = null;
+
     public ?int $selected_reviewer_id = null;
+
     public bool $showAssignModal = false;
 
     // SLA Edit state
     public string $edit_sla_date = '';
+
     public bool $edit_survey_required = true;
+
     public bool $showSlaModal = false;
 
     // --- FASE 3: ASSET STATE ---
     public bool $showAssetModal = false;
+
     public ?int $editingAssetId = null;
+
     public string $asset_type = 'tanah_bangunan';
+
     public string $asset_address = '';
+
     public string $asset_city = '';
+
     public string $asset_province = '';
+
     public string $asset_description = '';
 
     // --- FASE 3: REPORT STATE ---
     public bool $showReportModal = false;
+
     public ?int $editingReportId = null;
+
     public string $report_no = '';
+
     public string $report_date = '';
+
     public string $report_purpose = 'Penjaminan Utang';
+
     public float $resume_value = 0;
+
     public float $report_value = 0;
+
     public string $print_date = '';
+
     public array $selected_asset_ids = [];
 
     // --- FASE 3: DELIVERY STATE ---
     public bool $showDeliveryModal = false;
+
     public ?int $delivery_report_id = null;
+
     public string $sent_date = '';
+
     public string $courier = 'JNE';
+
     public string $tracking_no = '';
+
     public string $received_date = '';
+
     public string $recipient_name = '';
+
     public string $delivery_note = '';
 
     // --- FASE 3: DOCUMENT UPLOAD STATE ---
     public bool $showDocumentModal = false;
+
     public string $doc_title = '';
+
     public string $doc_type = 'scan_final';
+
     public $upload_file = null;
 
     public function mount(int $id): void
@@ -97,14 +130,47 @@ class Show extends Component
     // --- STATUS & SLA & ASSIGNMENT METHODS ---
     public function openStatusModal(string $status): void
     {
+        $this->authorize('work-orders.change-status');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->next_status = $status;
         $this->status_note = '';
         $this->showStatusModal = true;
     }
 
+    public function openAssignModal(): void
+    {
+        $this->authorize('work-orders.assign-pic');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
+        $this->showAssignModal = true;
+    }
+
+    public function openSlaModal(): void
+    {
+        $this->authorize('work-orders.edit-sla');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
+        $this->showSlaModal = true;
+    }
+
     public function updateStatus(): void
     {
         $this->authorize('work-orders.change-status');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->validate([
             'next_status' => 'required|in:PERSIAPAN,SURVEY,PENGERJAAN,REVIEW,CETAK,SELESAI,BATAL',
             'status_note' => 'nullable|string',
@@ -122,13 +188,13 @@ class Show extends Component
 
         $updateData = ['current_status' => $this->next_status];
 
-        if ($this->next_status === 'SELESAI' && !$this->workOrder->completed_at) {
+        if ($this->next_status === 'SELESAI' && ! $this->workOrder->completed_at) {
             $updateData['completed_at'] = Carbon::now();
         }
 
         $this->workOrder->update($updateData);
 
-        session()->flash('message', 'Status pekerjaan berhasil diperbarui menjadi ' . $this->next_status . '.');
+        session()->flash('message', 'Status pekerjaan berhasil diperbarui menjadi '.$this->next_status.'.');
         $this->showStatusModal = false;
         $this->workOrder->refresh();
     }
@@ -136,12 +202,22 @@ class Show extends Component
     public function markSurveyComplete(): void
     {
         $this->authorize('work-orders.survey');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->advanceStatus('SURVEY', 'PENGERJAAN', 'Aset selesai disurvey.');
     }
 
     public function markReviewComplete(): void
     {
         $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->advanceStatus('REVIEW', 'CETAK', 'Laporan selesai direview.');
     }
 
@@ -163,13 +239,18 @@ class Show extends Component
 
         $this->workOrder->update(['current_status' => $to]);
 
-        session()->flash('message', 'Status pekerjaan berhasil diperbarui menjadi ' . $to . '.');
+        session()->flash('message', 'Status pekerjaan berhasil diperbarui menjadi '.$to.'.');
         $this->workOrder->refresh();
     }
 
     public function saveSlaConfig(): void
     {
         $this->authorize('work-orders.edit-sla');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->validate([
             'edit_sla_date' => 'required|date',
             'edit_survey_required' => 'boolean',
@@ -188,6 +269,11 @@ class Show extends Component
     public function saveAssignments(): void
     {
         $this->authorize('work-orders.assign-pic');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         if ($this->selected_surveyor_id) {
             WorkOrderAssignment::updateOrCreate(
                 ['work_order_id' => $this->workOrder->id, 'role_type' => 'surveyor'],
@@ -210,6 +296,12 @@ class Show extends Component
     // --- FASE 3: ASSET METHODS ---
     public function createAsset(): void
     {
+        $this->authorize('work-orders.manage-assets');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->reset(['editingAssetId', 'asset_type', 'asset_address', 'asset_city', 'asset_province', 'asset_description']);
         $this->asset_type = 'tanah_bangunan';
         $this->showAssetModal = true;
@@ -217,6 +309,12 @@ class Show extends Component
 
     public function editAsset(int $id): void
     {
+        $this->authorize('work-orders.manage-assets');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $asset = WorkOrderAsset::findOrFail($id);
         $this->editingAssetId = $asset->id;
         $this->asset_type = $asset->asset_type;
@@ -230,6 +328,11 @@ class Show extends Component
     public function saveAsset(): void
     {
         $this->authorize('work-orders.manage-assets');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $validated = $this->validate([
             'asset_type' => 'required|string',
             'asset_address' => 'nullable|string',
@@ -265,6 +368,11 @@ class Show extends Component
     public function deleteAsset(int $id): void
     {
         $this->authorize('work-orders.manage-assets');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         WorkOrderAsset::findOrFail($id)->delete();
         session()->flash('message', 'Data aset berhasil dihapus.');
         $this->workOrder->refresh();
@@ -273,6 +381,12 @@ class Show extends Component
     // --- FASE 3: REPORT METHODS ---
     public function createReport(): void
     {
+        $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->reset(['editingReportId', 'report_no', 'report_purpose', 'resume_value', 'report_value', 'print_date', 'selected_asset_ids']);
         $this->report_date = Carbon::today()->format('Y-m-d');
         $this->report_purpose = 'Penjaminan Utang';
@@ -286,6 +400,12 @@ class Show extends Component
 
     public function editReport(int $id): void
     {
+        $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $report = Report::with('assets')->findOrFail($id);
         $this->editingReportId = $report->id;
         $this->report_no = $report->report_no;
@@ -301,6 +421,11 @@ class Show extends Component
     public function saveReport(): void
     {
         $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $validated = $this->validate([
             'report_date' => 'required|date',
             'report_purpose' => 'required|string|max:255',
@@ -318,6 +443,7 @@ class Show extends Component
 
         if ($duplicate) {
             session()->flash('error', "Pekerjaan ini sudah memiliki Laporan dengan nomor {$reportNo} (mengikuti Nomor Kontrak). Edit laporan yang sudah ada, jangan buat baru.");
+
             return;
         }
 
@@ -350,6 +476,11 @@ class Show extends Component
     public function deleteReport(int $id): void
     {
         $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         Report::findOrFail($id)->delete();
         session()->flash('message', 'Laporan berhasil dihapus.');
         $this->workOrder->refresh();
@@ -358,6 +489,12 @@ class Show extends Component
     // --- FASE 3: DELIVERY METHODS ---
     public function openDeliveryModal(int $reportId): void
     {
+        $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->delivery_report_id = $reportId;
         $delivery = Delivery::where('report_id', $reportId)->first();
 
@@ -380,6 +517,11 @@ class Show extends Component
     public function saveDelivery(): void
     {
         $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $validated = $this->validate([
             'sent_date' => 'required|date',
             'courier' => 'required|string|max:100',
@@ -409,6 +551,12 @@ class Show extends Component
     // --- FASE 3: DOCUMENT STORAGE METHODS ---
     public function openDocumentModal(): void
     {
+        $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->reset(['doc_title', 'doc_type', 'upload_file']);
         $this->doc_type = 'scan_final';
         $this->showDocumentModal = true;
@@ -417,6 +565,11 @@ class Show extends Component
     public function uploadDocument(): void
     {
         $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $this->validate([
             'doc_title' => 'required|string|max:255',
             'doc_type' => 'required|string',
@@ -442,6 +595,11 @@ class Show extends Component
     public function deleteDocument(int $id): void
     {
         $this->authorize('work-orders.review');
+
+        if (! $this->ensureWorkOrderIsMutable()) {
+            return;
+        }
+
         $doc = Document::findOrFail($id);
         if (Storage::disk('public')->exists($doc->file_path)) {
             Storage::disk('public')->delete($doc->file_path);
@@ -450,6 +608,27 @@ class Show extends Component
 
         session()->flash('message', 'Dokumen arsip berhasil dihapus.');
         $this->workOrder->refresh();
+    }
+
+    private function ensureWorkOrderIsMutable(): bool
+    {
+        $this->workOrder->refresh();
+
+        if (! $this->workOrder->isCancelled()) {
+            return true;
+        }
+
+        $this->showStatusModal = false;
+        $this->showAssignModal = false;
+        $this->showSlaModal = false;
+        $this->showAssetModal = false;
+        $this->showReportModal = false;
+        $this->showDeliveryModal = false;
+        $this->showDocumentModal = false;
+
+        session()->flash('error', self::CANCELLED_MESSAGE);
+
+        return false;
     }
 
     public function render()
@@ -461,6 +640,7 @@ class Show extends Component
         return view('livewire.work-orders.show', [
             'surveyors' => $surveyors,
             'reviewers' => $reviewers,
+            'isCancelled' => $this->workOrder->isCancelled(),
             'canChangeStatus' => $user?->can('work-orders.change-status') === true,
             'canEditSla' => $user?->can('work-orders.edit-sla') === true,
             'canAssignPic' => $user?->can('work-orders.assign-pic') === true,

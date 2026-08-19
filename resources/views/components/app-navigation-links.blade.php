@@ -40,7 +40,7 @@
         @endcan
     </div>
 
-    @canany(['menu.master-data', 'menu.master-users', 'users.manage', 'menu.audit-logs'])
+    @canany(['menu.master-data', 'menu.master-users', 'users.manage', 'offers.document-masters.view', 'menu.audit-logs'])
         <div class="space-y-1">
             <div class="ui-nav-section-label">Administrasi</div>
 
@@ -48,6 +48,13 @@
                 <x-sidebar-link :href="route('master.branches')" wire:navigate :active="request()->routeIs('master.branches')">
                     <x-navigation-icon name="branch" />
                     <span>Cabang</span>
+                </x-sidebar-link>
+            @endcan
+
+            @can('offers.document-masters.view')
+                <x-sidebar-link :href="route('master.offer-documents')" wire:navigate :active="request()->routeIs('master.offer-documents')">
+                    <x-navigation-icon name="document-master" />
+                    <span>Master Dokumen Penawaran</span>
                 </x-sidebar-link>
             @endcan
 

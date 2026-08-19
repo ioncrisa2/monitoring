@@ -6,6 +6,7 @@ use App\Livewire\Dashboard;
 use App\Livewire\Imports\DataImport;
 use App\Livewire\Master\Branches;
 use App\Livewire\Master\Debtors;
+use App\Livewire\Master\OfferDocumentMasters;
 use App\Livewire\Master\Organizations;
 use App\Livewire\Master\RolesPermissions;
 use App\Livewire\Master\Users;
@@ -38,9 +39,27 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/offers/{offer}/document/download', [OfferDocumentController::class, 'download'])
         ->middleware(['permission:offers.documents.generate-draft', 'throttle:10,1'])
         ->name('offers.documents.download');
+    Route::post('/offers/{offer}/document/submit', [OfferDocumentController::class, 'submit'])
+        ->middleware(['permission:offers.documents.manage', 'throttle:10,1'])
+        ->name('offers.documents.submit');
+    Route::post('/offers/{offer}/document/versions/{version}/approve', [OfferDocumentController::class, 'approve'])
+        ->middleware(['permission:offers.documents.generate-print-ready', 'throttle:10,1'])
+        ->name('offers.documents.approve');
+    Route::post('/offers/{offer}/document/versions/{version}/reject', [OfferDocumentController::class, 'reject'])
+        ->middleware(['permission:offers.documents.generate-print-ready', 'throttle:10,1'])
+        ->name('offers.documents.reject');
+    Route::post('/offers/{offer}/document/versions/{version}/finalize', [OfferDocumentController::class, 'finalize'])
+        ->middleware(['permission:offers.documents.generate-print-ready', 'throttle:10,1'])
+        ->name('offers.documents.finalize');
     Route::get('/offers/{offer}/document/print-ready', [OfferDocumentController::class, 'printReady'])
         ->middleware(['permission:offers.documents.generate-print-ready', 'throttle:10,1'])
         ->name('offers.documents.print-ready');
+    Route::get(
+        '/offers/{offer}/document/versions/{version}/artifacts/{artifact}',
+        [OfferDocumentController::class, 'artifact'],
+    )
+        ->middleware(['permission:offers.documents.view', 'throttle:20,1'])
+        ->name('offers.documents.artifacts.download');
     Route::get('/work-orders', WorkOrdersIndex::class)->middleware('permission:menu.work-orders')->name('work-orders.index');
     Route::get('/work-orders/{id}', WorkOrdersShow::class)->middleware('permission:menu.work-orders')->name('work-orders.show');
 
@@ -60,6 +79,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/roles-permissions', RolesPermissions::class)->middleware('permission:users.manage')->name('roles-permissions');
         Route::get('/organizations', Organizations::class)->middleware('permission:menu.master-data')->name('organizations');
         Route::get('/debtors', Debtors::class)->middleware('permission:menu.master-data')->name('debtors');
+        Route::get('/offer-documents', OfferDocumentMasters::class)
+            ->middleware('permission:offers.document-masters.view')
+            ->name('offer-documents');
     });
 });
 
