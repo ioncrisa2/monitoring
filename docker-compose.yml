@@ -1,0 +1,83 @@
+services:
+  # Web Server (Nginx)
+  web:
+    image: nginx:alpine
+    container_name: hjar_web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - hjar_network
+
+  # PHP Application (Laravel + PHP-FPM)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hjar_app
+    restart: unless-stopped
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=hjar_flows
+      - DB_USERNAME=hjar_user
+      - DB_PASSWORD=hjar_secret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CACHE_STORE=redis
+      - QUEUE_CONNECTION=redis
+      - SESSION_DRIVER=redis
+    volumes:
+      - ./:/var/www
+    depends_on:
+      - db
+      - redis
+    networks:
+      - hjar_network
+
+  # Database (MySQL)
+  db:
+    image: mysql:8.0
+    container_name: hjar_db
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: hjar_flows
+      MYSQL_USER: hjar_user
+      MYSQL_PASSWORD: hjar_secret
+      MYSQL_ROOT_PASSWORD: root_secret
+    volumes:
+      - hjar_mysql_data:/var/lib/mysql
+    networks:
+      - hjar_network
+
+  # Redis (Cache, Sessions, Queues)
+  redis:
+    image: redis:alpine
+    container_name: hjar_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - hjar_redis_data:/data
+    networks:
+      - hjar_network
+
+networks:
+  hjar_network:
+    driver: bridge
+
+volumes:
+  hjar_mysql_data:
+    driver: local
+  hjar_redis_data:
+    driver: local
