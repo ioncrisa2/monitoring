@@ -49,7 +49,7 @@ services:
     container_name: hjar_db
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "3307:3306"
     environment:
       MYSQL_DATABASE: hjar_flows
       MYSQL_USER: hjar_user
